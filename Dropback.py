@@ -19,6 +19,7 @@ import math
 from pytorch_lightning.core.datamodule import LightningDataModule
 from pathlib import Path
 
+import numpy as np
 import torch, torchvision
 import torchmetrics
 import pytorch_lightning as pl
@@ -48,9 +49,9 @@ class Dropback(torch.optim.SGD):
     Dropback only support SGD and SGD with momentum
     Does not currently support Nesterov
     '''
-
     def __init__(self, params, lr, track_size=0, init_decay=1, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False, named_params=[]):
+        
         super(Dropback, self).__init__(params, lr=lr, momentum=momentum, dampening=dampening,
                                        weight_decay=weight_decay, nesterov=nesterov)
         # TODO: check if input values are valid
@@ -151,8 +152,66 @@ class Dropback(torch.optim.SGD):
         self.dump_flag = True
     def disable_dumping(self):
         self.dump_flag = False
-    
 
+
+
+# +
+def measure_module_sparsity(module, weight=True, bias=False, use_mask=False):
+
+    num_zeros = 0
+    num_elements = 0
+
+    if use_mask == True:
+        for buffer_name, buffer in module.named_buffers():
+            if "weight_mask" in buffer_name and weight == True:
+                num_zeros += torch.sum(buffer == 0).item()
+                num_elements += buffer.nelement()
+            if "bias_mask" in buffer_name and bias == True:
+                num_zeros += torch.sum(buffer == 0).item()
+                num_elements += buffer.nelement()
+    else:
+        for param_name, param in module.named_parameters():
+            if "weight" in param_name and weight == True:
+#                 num_zeros += torch.sum(param == 0).item()
+                num_zeros += torch.sum(torch.abs(param) < 0.1).item()
+
+                num_elements += param.nelement()
+            if "bias" in param_name and bias == True:
+#                 num_zeros += torch.sum(param == 0).item()
+                num_zeros += torch.sum(torch.abs(param) < 0.1).item()
+                num_elements += param.nelement()
+                
+    if num_elements == 0:
+        return 0,0,0
+
+    sparsity = num_zeros / num_elements
+
+    return num_zeros, num_elements, sparsity
+
+
+def measure_global_sparsity(model,
+                            weight=True,
+                            bias=False,
+                            use_mask=True):
+
+    num_zeros = 0
+    num_elements = 0
+
+    for module_name, module in model.named_modules():
+        module_num_zeros, module_num_elements, _ = measure_module_sparsity(
+            module, weight=weight, bias=bias, use_mask=use_mask)
+        num_zeros += module_num_zeros
+        num_elements += module_num_elements
+
+    if num_elements == 0:
+        return 0,0,0
+    
+    sparsity = num_zeros / num_elements
+
+    return num_zeros, num_elements, sparsity
+
+
+# -
 
 class ExperiementModel(pl.LightningModule):
 
@@ -229,6 +288,15 @@ class ExperiementModel(pl.LightningModule):
         self.log("ptl/train_accuracy_top5", self.train_accuracy_top5(pred, y))
         
         return loss
+    
+    def training_epoch_end(self, outputs):
+        num_zeros, num_elements, sparsity = measure_global_sparsity(self.model, weight=True, bias=False, use_mask=False)
+        self.log("num_zeros", num_zeros)
+        self.log("num_elements", num_elements)
+        self.log("sparsity", sparsity)
+        
+        for name,params in self.named_parameters():
+            self.logger.experiment.add_histogram(name,params,self.current_epoch)
 
     def validation_step(self, val_batch, batch_idx):
         x, y = val_batch
@@ -269,6 +337,19 @@ cifar10_dm = CIFAR10DataModule(
 
 # -
 
+def train_debug(config, num_epochs=10, num_gpus=0):
+    # data_dir = os.path.expanduser("./data")
+    model = ExperiementModel(config=config)
+    model.datamodule = cifar10_dm
+    trainer = pl.Trainer(
+        max_epochs=num_epochs,
+        # If fractional GPUs passed in, convert to int.
+        gpus=math.ceil(num_gpus),
+        logger=TensorBoardLogger(save_dir="./log", name="", version="."),
+        progress_bar_refresh_rate=0)
+    trainer.fit(model)
+
+
 def train_tune(config, num_epochs=10, num_gpus=0):
     # data_dir = os.path.expanduser("./data")
     model = ExperiementModel(config=config)
@@ -298,7 +379,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         "weight_decay": 4e-5,
         # "batch_size": tune.choice([32, 64, 128]),
         "track_size": 500000,
-        "init_decay": 0.9,
+        "init_decay": 0.1,
     }
 
     scheduler = ASHAScheduler(
@@ -332,3 +413,13 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
 
 if __name__== "__main__":
     tune_asha(num_samples=1, num_epochs=50, gpus_per_trial=1)
+#     config = {
+# #         "lr": tune.loguniform(1e-4, 1e-1),
+#         "lr": 0.01,
+#         "momentum": 0.99,
+#         "weight_decay": 4e-5,
+#         # "batch_size": tune.choice([32, 64, 128]),
+#         "track_size": 500000,
+#         "init_decay": 0.1,
+#     }
+#     train_debug(config=config)
