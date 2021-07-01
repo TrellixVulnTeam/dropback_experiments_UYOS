@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.11.0
+#       jupytext_version: 1.11.3
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -161,7 +161,7 @@ cifar10_dm = CIFAR10DataModule(
 def train_tune(config, num_epochs=10, num_gpus=0):
     # data_dir = os.path.expanduser("./data")
     model = ExperiementModel(config=config)
-    model.datamodule = cifar10_dm
+
     trainer = pl.Trainer(
         max_epochs=num_epochs,
         # If fractional GPUs passed in, convert to int.
@@ -176,12 +176,12 @@ def train_tune(config, num_epochs=10, num_gpus=0):
                 },
                 on="validation_end")
         ])
-    trainer.fit(model)
+    trainer.fit(model, datamodule=cifar10_dm)
 
 
 def train_tune_checkpoint(config,
                           checkpoint_dir=None,
-                          num_epoches=10,
+                          num_epochs=10,
                           num_gpus=0):
     # data_dir = os.path.expanduser("./data")
     trainer = pl.Trainer(
@@ -251,7 +251,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
 
 
 if __name__== "__main__":
-    tune_asha(num_samples=1, num_epochs=100, gpus_per_trial=1)
+    tune_asha(num_samples=10, num_epochs=100, gpus_per_trial=1)
 
 
 
