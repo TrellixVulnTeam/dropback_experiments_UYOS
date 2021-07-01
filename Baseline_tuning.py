@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.11.3
+#       jupytext_version: 1.11.0
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -251,7 +251,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
 
 
 if __name__== "__main__":
-    tune_asha(num_samples=10, num_epochs=100, gpus_per_trial=1)
+    tune_asha(num_samples=1, num_epochs=100, gpus_per_trial=1)
 
 
 
