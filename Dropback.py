@@ -393,7 +393,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,
-        grace_period=1,
+        grace_period=50,
         reduction_factor=2)
 
     reporter = CLIReporter(
