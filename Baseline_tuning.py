@@ -99,8 +99,12 @@ class ExperiementModel(pl.LightningModule):
     
     def configure_optimizers(self):
         optimizer = optim.SGD(self.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
-        scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1**(epoch // 30))
+#         scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1**(epoch // 30))
+#         scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+#         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=5, verbose=False, threshold=1e-1, threshold_mode='abs', cooldown=0, min_lr=0.002, eps=1e-8)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150,250], gamma=0.1)
         return [optimizer], [scheduler]
+#         return optimizer
 
     def training_step(self, train_batch, batch_idx):
         x, y = train_batch
@@ -146,7 +150,7 @@ test_transforms = torchvision.transforms.Compose([
 
 cifar10_dm = CIFAR10DataModule(
     data_dir='~/data',
-    batch_size=256,
+    batch_size=128,
     num_workers=8,
     train_transforms=train_transforms,
     test_transforms=test_transforms,
@@ -176,7 +180,7 @@ def train_tune(config, num_epochs=10, num_gpus=0):
                 },
                 on="validation_end")
         ])
-    trainer.fit(model, datamodule=cifar10_dm)
+    trainer.fit(model, datamodule=cifar10_dm) #TODO: pass data module in
 
 
 def train_tune_checkpoint(config,
@@ -191,8 +195,8 @@ def train_tune_checkpoint(config,
         logger=TensorBoardLogger(save_dir=tune.get_trial_dir(), name="", version="."),
         progress_bar_refresh_rate=0,
         callbacks=[
-            TuneReportCallback(
-                {
+            TuneReportCheckpointCallback(
+                metrics={
                     "loss": "ptl/val_loss",
                     "mean_accuracy": "ptl/val_accuracy_top1"
                 },
@@ -207,16 +211,16 @@ def train_tune_checkpoint(config,
         trainer.current_epoch = ckpt["epoch"]
     else:
         model = ExperiementModel(config=config)
-        model.datamodule = cifar10_dm
-    trainer.fit(model)
+    trainer.fit(model, datamodule=cifar10_dm) #TODO: pass data module in
 
 
 # Run
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
-        "lr": tune.loguniform(1e-4, 1e-1),
-        "momentum": 0.99,
+#         "lr": tune.loguniform(1e-4, 1e-1),
+        "lr": 0.1,
+        "momentum": 0.9,
         "weight_decay": 4e-5,
         # "batch_size": tune.choice([32, 64, 128]),
     }
@@ -227,7 +231,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         reduction_factor=2)
 
     reporter = CLIReporter(
-        parameter_columns=["lr"],
+        parameter_columns=["lr", "momentum"],
         metric_columns=["loss", "mean_accuracy", "training_iteration"])
 
     analysis = tune.run(
@@ -236,7 +240,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
             num_epochs=num_epochs,
             num_gpus=gpus_per_trial),
         resources_per_trial={
-            "cpu": 1,
+            "cpu": 2,
             "gpu": gpus_per_trial
         },
         metric="loss",
@@ -251,7 +255,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
 
 
 if __name__== "__main__":
-    tune_asha(num_samples=10, num_epochs=100, gpus_per_trial=1)
+    tune_asha(num_samples=4, num_epochs=350, gpus_per_trial=1)
 
 
 

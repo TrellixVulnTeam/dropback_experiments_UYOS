@@ -13,8 +13,6 @@
 #     name: python3
 # ---
 
-# !pip install pytorch-lightning lightning-bolts torchmetrics ray[tune] ray[default]
-
 # +
 import os
 import math
@@ -52,13 +50,6 @@ from ray import tune
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
 from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneReportCheckpointCallback
-# +
-# model = models.mobilenet_v2()
-
-# module = model.features[0][0]
-# prune.l1_unstructured(module, "weight", amount=3)
-# print(list(module.named_buffers()))
-
 # +
 def measure_module_sparsity(module, weight=True, bias=False, use_mask=False):
 
