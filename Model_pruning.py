@@ -157,8 +157,10 @@ class ExperiementModel(pl.LightningModule):
     
     def configure_optimizers(self):
         optimizer = optim.SGD(self.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
-        scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1**(epoch // 30))
+        scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch:0.1 if epoch%50==0 else (10 if epoch%100==0 else 1))
+#         scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[100, 200], gamma=0.1)
         return [optimizer], [scheduler]
+#         return optimizer
 
     def training_step(self, train_batch, batch_idx):
         x, y = train_batch
@@ -169,6 +171,7 @@ class ExperiementModel(pl.LightningModule):
         self.log("ptl/train_loss", loss)
         self.log("ptl/train_accuracy_top1", self.train_accuracy_top1(pred, y))
         self.log("ptl/train_accuracy_top5", self.train_accuracy_top5(pred, y))
+        self.log("lr", self.lr)
         
         return loss
     
@@ -177,6 +180,10 @@ class ExperiementModel(pl.LightningModule):
         self.log("num_zeros", num_zeros)
         self.log("num_elements", num_elements)
         self.log("sparsity", sparsity)
+        
+        for name, module in self.named_modules():
+            if hasattr(module, 'weight'):
+                self.logger.experiment.add_histogram(name,module.weight,self.current_epoch)
 
     def validation_step(self, val_batch, batch_idx):
         x, y = val_batch
@@ -222,7 +229,7 @@ def train_tune(config, num_epochs=10, num_gpus=0):
     # data_dir = os.path.expanduser("./data")
     model = ExperiementModel(config=config)
     model.datamodule = cifar10_dm
-        
+            
     trainer = pl.Trainer(
         max_epochs=num_epochs,
         # If fractional GPUs passed in, convert to int.
@@ -233,7 +240,7 @@ def train_tune(config, num_epochs=10, num_gpus=0):
             ModelPruning(
                 pruning_fn='l1_unstructured',
                 parameter_names=["weight"],
-                amount = lambda x: 0.1 if x%3==0 else 0,
+                amount = lambda epoch: 0.1 if (epoch > 100 and epoch % 50 == 0) else 0,
                 use_global_unstructured=True,
                 verbose=2,
             ),
@@ -249,15 +256,16 @@ def train_tune(config, num_epochs=10, num_gpus=0):
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
-        "lr": tune.loguniform(1e-4, 1e-1),
-        "momentum": 0.99,
+#         "lr": tune.loguniform(1e-4, 1e-1),
+        "lr" : 0.01,
+        "momentum": 0.9,
         "weight_decay": 4e-5,
         # "batch_size": tune.choice([32, 64, 128]),
     }
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,
-        grace_period=1,
+        grace_period=50,
         reduction_factor=2)
 
     reporter = CLIReporter(
@@ -270,7 +278,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
             num_epochs=num_epochs,
             num_gpus=gpus_per_trial),
         resources_per_trial={
-            "cpu": 1,
+            "cpu": 2,
             "gpu": gpus_per_trial
         },
         metric="loss",
@@ -279,10 +287,10 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         num_samples=num_samples,
         scheduler=scheduler,
         progress_reporter=reporter,
-        name="tune_mnist_asha")
+        name="pruning")
 
     print("Best hyperparameters found were: ", analysis.best_config)
 
 
 if __name__== "__main__":
-    tune_asha(num_samples=1, num_epochs=10, gpus_per_trial=1)
+    tune_asha(num_samples=4, num_epochs=800, gpus_per_trial=1)

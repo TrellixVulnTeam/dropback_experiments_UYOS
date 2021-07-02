@@ -1,7 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: ipynb,py
+#     formats: ipynb,py:light
 #     text_representation:
 #       extension: .py
 #       format_name: light
@@ -249,7 +249,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         num_samples=num_samples,
         scheduler=scheduler,
         progress_reporter=reporter,
-        name="tune_mnist_asha")
+        name="baseline")
 
     print("Best hyperparameters found were: ", analysis.best_config)
 

@@ -41,6 +41,14 @@ from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
 from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneReportCheckpointCallback
 
+# +
+model = models.mobilenet_v2(num_classes=10)
+
+num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+print((1-0.1)**26)
+print(num_parameters * ((1-0.5)**4))
+
 
 # -
 
@@ -152,7 +160,6 @@ class Dropback(torch.optim.SGD):
         self.dump_flag = True
     def disable_dumping(self):
         self.dump_flag = False
-
 
 
 # +
@@ -274,7 +281,8 @@ class ExperiementModel(pl.LightningModule):
                              weight_decay=self.weight_decay, 
                              track_size = self.track_size, 
                              init_decay = self.init_decay)
-        scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1**(epoch // 30))
+#         scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1**(epoch // 30))
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150,250], gamma=0.1)
         return [optimizer], [scheduler]
 
     def training_step(self, train_batch, batch_idx):
@@ -286,6 +294,7 @@ class ExperiementModel(pl.LightningModule):
         self.log("ptl/train_loss", loss)
         self.log("ptl/train_accuracy_top1", self.train_accuracy_top1(pred, y))
         self.log("ptl/train_accuracy_top5", self.train_accuracy_top5(pred, y))
+        self.log("lr", self.lr)
         
         return loss
     
@@ -374,11 +383,11 @@ def train_tune(config, num_epochs=10, num_gpus=0):
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
 #         "lr": tune.loguniform(1e-4, 1e-1),
-        "lr": 0.01,
-        "momentum": 0.99,
+        "lr": 0.1,
+        "momentum": 0.9,
         "weight_decay": 4e-5,
         # "batch_size": tune.choice([32, 64, 128]),
-        "track_size": 500000,
+        "track_size": 140000,
         "init_decay": 0.1,
     }
 
@@ -406,13 +415,13 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         num_samples=num_samples,
         scheduler=scheduler,
         progress_reporter=reporter,
-        name="tune_mnist_asha")
+        name="dropback")
 
     print("Best hyperparameters found were: ", analysis.best_config)
 
 
 if __name__== "__main__":
-    tune_asha(num_samples=1, num_epochs=50, gpus_per_trial=1)
+    tune_asha(num_samples=4, num_epochs=300, gpus_per_trial=1)
 #     config = {
 # #         "lr": tune.loguniform(1e-4, 1e-1),
 #         "lr": 0.01,
