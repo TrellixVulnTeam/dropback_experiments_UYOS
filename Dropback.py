@@ -15,39 +15,38 @@
 
 # +
 import os
+import sys
 import math
-from pytorch_lightning.core.datamodule import LightningDataModule
-from pathlib import Path
 
 import numpy as np
-import torch, torchvision
-import torchmetrics
-import pytorch_lightning as pl
+
+import torch
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
-from torch.utils.data import DataLoader, random_split
+
 import torch.nn.functional as F
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
+
+import torchvision
 import torchvision.models as models
-from torchvision.datasets.utils import download_and_extract_archive
-from pl_bolts.datamodules import CIFAR10DataModule
-from pl_bolts.transforms.dataset_normalizations import cifar10_normalization
+
+import pytorch_lightning as pl
+from pytorch_lightning import seed_everything
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities.cloud_io import load as pl_load
+
+import torchmetrics
+
+from pl_bolts.datamodules import CIFAR10DataModule
+from pl_bolts.transforms.dataset_normalizations import cifar10_normalization
+
 from ray import tune
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
 from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneReportCheckpointCallback
 
-# +
-model = models.mobilenet_v2(num_classes=10)
-
-num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-print((1-0.1)**26)
-print(num_parameters * ((1-0.5)**4))
+from utils import measure_global_sparsity
 
 
 # -
@@ -161,64 +160,6 @@ class Dropback(torch.optim.SGD):
     def disable_dumping(self):
         self.dump_flag = False
 
-
-# +
-def measure_module_sparsity(module, weight=True, bias=False, use_mask=False):
-
-    num_zeros = 0
-    num_elements = 0
-
-    if use_mask == True:
-        for buffer_name, buffer in module.named_buffers():
-            if "weight_mask" in buffer_name and weight == True:
-                num_zeros += torch.sum(buffer == 0).item()
-                num_elements += buffer.nelement()
-            if "bias_mask" in buffer_name and bias == True:
-                num_zeros += torch.sum(buffer == 0).item()
-                num_elements += buffer.nelement()
-    else:
-        for param_name, param in module.named_parameters():
-            if "weight" in param_name and weight == True:
-#                 num_zeros += torch.sum(param == 0).item()
-                num_zeros += torch.sum(torch.abs(param) < 0.1).item()
-
-                num_elements += param.nelement()
-            if "bias" in param_name and bias == True:
-#                 num_zeros += torch.sum(param == 0).item()
-                num_zeros += torch.sum(torch.abs(param) < 0.1).item()
-                num_elements += param.nelement()
-                
-    if num_elements == 0:
-        return 0,0,0
-
-    sparsity = num_zeros / num_elements
-
-    return num_zeros, num_elements, sparsity
-
-
-def measure_global_sparsity(model,
-                            weight=True,
-                            bias=False,
-                            use_mask=True):
-
-    num_zeros = 0
-    num_elements = 0
-
-    for module_name, module in model.named_modules():
-        module_num_zeros, module_num_elements, _ = measure_module_sparsity(
-            module, weight=weight, bias=bias, use_mask=use_mask)
-        num_zeros += module_num_zeros
-        num_elements += module_num_elements
-
-    if num_elements == 0:
-        return 0,0,0
-    
-    sparsity = num_zeros / num_elements
-
-    return num_zeros, num_elements, sparsity
-
-
-# -
 
 class ExperiementModel(pl.LightningModule):
 
@@ -359,7 +300,7 @@ def train_debug(config, num_epochs=10, num_gpus=0):
     trainer.fit(model)
 
 
-def train_tune(config, num_epochs=10, num_gpus=0):
+def training(config, num_epochs=10, num_gpus=0):
     # data_dir = os.path.expanduser("./data")
     model = ExperiementModel(config=config)
     model.datamodule = cifar10_dm
@@ -402,7 +343,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
 
     analysis = tune.run(
         tune.with_parameters(
-            train_tune,
+            training,
             num_epochs=num_epochs,
             num_gpus=gpus_per_trial),
         resources_per_trial={
