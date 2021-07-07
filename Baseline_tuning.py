@@ -40,7 +40,7 @@ from pl_bolts.datamodules import CIFAR10DataModule
 from pl_bolts.transforms.dataset_normalizations import cifar10_normalization
 
 from ray import tune
-from ray.tune import CLIReporter
+from ray.tune import CLIReporter, JupyterNotebookReporter
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
 from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneReportCheckpointCallback
 
@@ -99,7 +99,7 @@ class ExperiementModel(pl.LightningModule):
     
     def configure_optimizers(self):
         optimizer = optim.SGD(self.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150,250], gamma=0.1)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 200, 250], gamma=0.1)
         
         return [optimizer], [scheduler]
 
@@ -124,12 +124,11 @@ class ExperiementModel(pl.LightningModule):
         self.log("ptl/val_loss", loss)
         self.log("ptl/val_accuracy_top1", self.val_accuracy_top1(pred, y))
         self.log("ptl/val_accuracy_top5", self.val_accuracy_top5(pred, y))
+        self.log("current_lr", self.trainer.lr_schedulers[0]["scheduler"].get_last_lr()[0])
         
     def training_epoch_end(self,outputs):
         for name, params in self.named_parameters():
             self.logger.experiment.add_histogram(name, params, self.current_epoch)
-
-
 
     def test_step(self, *args, **kwargs):
         return self.validation_step(*args, **kwargs)
@@ -169,7 +168,8 @@ def training(config, num_epochs=10, num_gpus=0):
         max_epochs=num_epochs,
         # If fractional GPUs passed in, convert to int.
         gpus=math.ceil(num_gpus),
-        logger=TensorBoardLogger(save_dir=tune.get_trial_dir(), name="", version="."),
+        logger=TensorBoardLogger(
+            save_dir=tune.get_trial_dir(), name="", version="."),
         progress_bar_refresh_rate=0,
         deterministic=True,
         callbacks=
@@ -180,9 +180,10 @@ def training(config, num_epochs=10, num_gpus=0):
                 mode='min',
             ),
             TuneReportCallback(
-                {
+                metrics = {
                     "loss": "ptl/val_loss",
-                    "mean_accuracy": "ptl/val_accuracy_top1"
+                    "mean_accuracy": "ptl/val_accuracy_top1",
+                    "current_lr": "current_lr",
                 },
                 on="validation_end")
         ]
@@ -194,22 +195,28 @@ def training(config, num_epochs=10, num_gpus=0):
 def tune_asha(
     num_samples=10, 
     num_epochs=10, 
-    gpus_per_trial=0, 
-    callbacks = None):
+    gpus_per_trial=0,
+    ):
     config = {
-        "lr": tune.loguniform(1e-4, 1e-1),
+#         "lr": tune.loguniform(1e-4, 1e-1),
+        "lr": 0.1,
         "momentum": 0.9,
         "weight_decay": 4e-5,
-        }
+    }
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,
         grace_period=1,
         reduction_factor=2)
 
-    reporter = CLIReporter(
+    reporter = JupyterNotebookReporter(
+        overwrite=True,
         parameter_columns=["lr", "momentum"],
-        metric_columns=["loss", "mean_accuracy", "training_iteration"])
+        metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
+    )
+#     reporter = CLIReporter(
+#         parameter_columns=["lr", "momentum"],
+#         metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
 
     analysis = tune.run(
         tune.with_parameters(
@@ -232,9 +239,104 @@ def tune_asha(
     print("Best hyperparameters found were: ", analysis.best_config)
 
 
+# +
+def training_w_checkpoint(config, checkpoint_dir = None, num_epochs=10, num_gpus=0):
+    
+    seed_everything(42, workers=True)
+
+    trainer = pl.Trainer(
+        max_epochs=num_epochs,
+        # If fractional GPUs passed in, convert to int.
+        gpus=math.ceil(num_gpus),
+        logger=TensorBoardLogger(
+            save_dir=tune.get_trial_dir(), name="", version="."),
+        progress_bar_refresh_rate=0,
+        deterministic=True,
+        callbacks=
+        [
+            ModelCheckpoint(
+                monitor='ptl/val_loss',
+                save_top_k=3,
+                mode='min',
+            ),
+            TuneReportCheckpointCallback(
+                metrics = {
+                    "loss": "ptl/val_loss",
+                    "mean_accuracy": "ptl/val_accuracy_top1",
+                    "current_lr": "current_lr",
+                },
+                filename="checkpoint",
+                on="validation_end")
+        ]
+    )
+    
+    if checkpoint_dir:
+        # Currently, this leads to errors:
+        # model = LightningMNISTClassifier.load_from_checkpoint(
+        #     os.path.join(checkpoint, "checkpoint"))
+        # Workaround:
+        ckpt = pl_load(
+            os.path.join(checkpoint_dir, "checkpoint"),
+            map_location=lambda storage, loc: storage)
+        model = ExperiementModel._load_model_state(
+            ckpt, config=config)
+        trainer.current_epoch = ckpt["epoch"]
+    else:
+        model = ExperiementModel(config=config)
+        
+    trainer.fit(model, datamodule=cifar10_dm) 
+
+
+def tune_pbt(
+    num_samples=10, 
+    num_epochs=10, 
+    gpus_per_trial=0, 
+    ):
+    config = {
+        "lr": 0.1,
+        "momentum": 0.9,
+        "weight_decay": 4e-5,
+    }
+    
+    scheduler = PopulationBasedTraining(
+        perturbation_interval=4,
+        hyperparam_mutations={
+            "lr": tune.loguniform(1e-4, 1e-1),
+        }
+    )
+
+    reporter = JupyterNotebookReporter(
+        overwrite=False,
+        parameter_columns=["lr", "momentum"],
+        metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
+    )
+#     reporter = CLIReporter(
+#         parameter_columns=["lr", "momentum"],
+#         metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
+
+    analysis = tune.run(
+        tune.with_parameters(
+            training_w_checkpoint,
+            num_epochs=num_epochs,
+            num_gpus=gpus_per_trial,
+        ),
+        resources_per_trial={
+            "cpu": 2,
+            "gpu": gpus_per_trial
+        },
+        metric="loss",
+        mode="min",
+        config=config,
+        num_samples=num_samples,
+        scheduler=scheduler,
+        progress_reporter=reporter,
+        name="baseline_pbt")
+
+    print("Best hyperparameters found were: ", analysis.best_config)
+
+
 # -
 
 if __name__== "__main__":
-    tune_asha(num_samples=1, num_epochs=10, gpus_per_trial=1)
-
-
+    tune_asha(num_samples=1, num_epochs=350, gpus_per_trial=1)
+#     tune_pbt(num_samples=4, num_epochs=350, gpus_per_trial=1)
