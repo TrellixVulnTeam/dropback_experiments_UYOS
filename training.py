@@ -5,6 +5,7 @@ import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelPruning
 from pytorch_lightning.utilities.cloud_io import load as pl_load
 
 from ray import tune
@@ -110,14 +111,25 @@ def tune_asha(
 
         
 if __name__ == '__main__':
+    checkpoint_callback = ModelCheckpoint(
+        monitor='ptl/val_loss',
+        filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}',
+        save_top_k=3,
+        mode='min',
+        auto_insert_metric_name=False
+        )
+
+    prune_callback = ModelPruning(
+        pruning_fn='l1_unstructured',
+        parameter_names=["weight", "bias"],
+        amount = lambda epoch: 0.1 if (epoch > 100 and epoch % 50 == 0) else 0,
+        use_global_unstructured=True,
+        verbose=1,
+        )
+    
     callback = [
-        ModelCheckpoint(
-            monitor='ptl/val_loss',
-            filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}',
-            save_top_k=3,
-            mode='min',
-            auto_insert_metric_name=False
-        ),
+        checkpoint_callback,
+        # prune_callback,
         TuneReportCallback(
             metrics = {
                 "loss": "ptl/val_loss",
@@ -129,15 +141,15 @@ if __name__ == '__main__':
 
     cifar10_dm = cifar_datamodule()
     tune_asha(
-    num_samples=1, 
-    num_epochs=50, 
-    gpus_per_trial=1,
-    deterministic=True,
-    datamodule=cifar10_dm,
-    num_classes=10,
-    callback=callback,
-    checkpoint_path=None
-    )
+        num_samples=6, 
+        num_epochs=400, 
+        gpus_per_trial=1,
+        deterministic=False,
+        datamodule=cifar10_dm,
+        # num_classes=100,
+        callback=callback,
+        checkpoint_path=None
+        )
 
 
 # def training_w_checkpoint(config, checkpoint_dir = None, num_epochs=10, num_gpus=0):

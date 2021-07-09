@@ -10,6 +10,9 @@ from pytorch_lightning.utilities import rank_zero_info
 
 import torchmetrics
 
+from utils import measure_global_sparsity
+
+from Dropback import Dropback
 
 class ExperimentModel(pl.LightningModule):
 
@@ -32,6 +35,12 @@ class ExperimentModel(pl.LightningModule):
         self.lr = config["lr"]
         self.momentum = config["momentum"]
         self.weight_decay = config["weight_decay"]
+        
+        # parameters of Dropback
+        if "track_size" in config.keys():
+            self.track_size = config["track_size"]
+        if "init_decay" in config.keys():
+            self.init_decay = config["init_decay"]
 
         self.arch = arch
         self.num_classes = num_classes
@@ -69,9 +78,20 @@ class ExperimentModel(pl.LightningModule):
             f"trainable parameters out of {len(parameters)}."
         )
 
-        use_ReduceLROnPlateau = False
-        optimizer = optim.SGD(trainable_parameters, lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
+        use_dropback = False
+        if use_dropback:
+            optimizer = Dropback(
+                self.parameters(), 
+                lr=self.lr, 
+                momentum=self.momentum, 
+                weight_decay=self.weight_decay, 
+                track_size = self.track_size, 
+                init_decay = self.init_decay
+                )
+        else:
+            optimizer = optim.SGD(trainable_parameters, lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
         
+        use_ReduceLROnPlateau = False
         if use_ReduceLROnPlateau:
             scheduler = lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=0.1, patience=20, threshold=1e-1, threshold_mode='abs', 
@@ -79,7 +99,7 @@ class ExperimentModel(pl.LightningModule):
         
             return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "ptl/val_loss"}
         
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 200, 250], gamma=0.1)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250, 350], gamma=0.1)
         return [optimizer], [scheduler]
 
     def training_step(self, train_batch, batch_idx):
@@ -117,6 +137,26 @@ class ExperimentModel(pl.LightningModule):
         self.log_dict({'test_loss': loss, 'test_acc': accuracy})
         
     def training_epoch_end(self,outputs):
+        model_pruned = False
+        use_mask = True
+        threshold = 0
+
+        if model_pruned:
+            num_zeros, num_elements, sparsity = measure_global_sparsity(self.model, threshold=threshold, weight=True, bias=False, use_mask=use_mask)
+            self.log("num_zeros", num_zeros)
+            self.log("num_elements", num_elements)
+            self.log("sparsity", sparsity)
+
+            if use_mask:
+                for name, module in self.named_modules():
+                    if hasattr(module, 'weight'):
+                        self.logger.experiment.add_histogram(name, module.weight, self.current_epoch)
+                    if hasattr(module, 'bias'):
+                        self.logger.experiment.add_histogram(name, module.bias, self.current_epoch)
+            else:
+                for name,params in self.named_parameters():
+                    self.logger.experiment.add_histogram(name,params,self.current_epoch)
+        
         for name, params in self.named_parameters():
             self.logger.experiment.add_histogram(name, params, self.current_epoch)
 
