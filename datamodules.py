@@ -16,7 +16,7 @@ class cifar_datamodule(pl.LightningDataModule):
         self,
         dataset: str = "cifar10",
         data_dir:str = "~/data",
-        num_workers:int = 16,
+        num_workers:int = 8,
         batch_size: int = 256,
         shuffle: bool = False,
         split: bool = False,

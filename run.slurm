@@ -12,4 +12,4 @@ conda activate base
 
 nvidia-smi
 # python Baseline_pruning.py
-python training.py
+python training.py --experiment_name prune

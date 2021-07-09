@@ -7,6 +7,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks import ModelPruning
 from pytorch_lightning.utilities.cloud_io import load as pl_load
+from pytorch_lightning.utilities import rank_zero_info
 
 from ray import tune
 from ray.tune import CLIReporter, JupyterNotebookReporter
@@ -22,6 +23,13 @@ parser.add_argument("--experiment_name", default="baseline")
 def main():
     args = parser.parse_args()
 
+    # rank_zero_info(f"Experiment name is: {args.experiment_name}")
+
+    prune_checkpoint_callback = ModelCheckpoint(
+        filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}',
+        auto_insert_metric_name=False,
+        )
+
     checkpoint_callback = ModelCheckpoint(
         monitor='ptl/val_loss',
         filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}',
@@ -33,13 +41,13 @@ def main():
     prune_callback = ModelPruning(
         pruning_fn='l1_unstructured',
         parameter_names=["weight", "bias"],
-        amount = lambda epoch: 0.1 if (epoch > 299 and epoch % 100 == 0) else 0,
+        amount = lambda epoch: 0.14 if (epoch > 299 and epoch % 100 == 0 and epoch < 2300) else 0,
         use_global_unstructured=True,
         verbose=1,
         )
     
     callback = [
-        checkpoint_callback,
+        # checkpoint_callback,
         # prune_callback,
         TuneReportCallback(
             metrics = {
@@ -59,13 +67,14 @@ def main():
         callback.append(checkpoint_callback)
     elif args.experiment_name == "prune":
         callback.append(prune_callback)
+        callback.append(prune_checkpoint_callback)
     elif args.experiment_name == "dropback":
         callback.append(checkpoint_callback)
     
 
     tune_asha(
-        num_samples=1, 
-        num_epochs=400, 
+        num_samples=4, 
+        num_epochs=2350, 
         gpus_per_trial=1,
         deterministic=False,
         datamodule=cifar10_dm,
@@ -183,7 +192,7 @@ def tune_asha(
         mode="min",
         config=config,
         num_samples=num_samples,
-        scheduler=scheduler,
+        # scheduler=scheduler,
         progress_reporter=reporter,
         name=experiment_name)
 
