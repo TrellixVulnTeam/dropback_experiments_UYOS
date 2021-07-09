@@ -16,6 +16,66 @@ from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneRepor
 from models import ExperimentModel
 from datamodules import cifar_datamodule
 
+parser = argparse.ArgumentParser(description="Dropback & prune experiments.")
+parser.add_argument("--experiment_name", default="baseline")
+
+def main():
+    args = parser.parse_args()
+
+    checkpoint_callback = ModelCheckpoint(
+        monitor='ptl/val_loss',
+        filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}',
+        save_top_k=3,
+        mode='min',
+        auto_insert_metric_name=False
+        )
+
+    prune_callback = ModelPruning(
+        pruning_fn='l1_unstructured',
+        parameter_names=["weight", "bias"],
+        amount = lambda epoch: 0.1 if (epoch > 299 and epoch % 100 == 0) else 0,
+        use_global_unstructured=True,
+        verbose=1,
+        )
+    
+    callback = [
+        checkpoint_callback,
+        # prune_callback,
+        TuneReportCallback(
+            metrics = {
+                "loss": "ptl/val_loss",
+                "mean_accuracy": "ptl/val_accuracy_top1",
+                "current_lr": "current_lr",
+            },
+            on="validation_end")
+    ]
+
+    cifar10_dm = cifar_datamodule()
+    # cifar100_dm = cifar_datamodule(dataset="cifar100")
+
+    checkpoint_path = None
+
+    if args.experiment_name == "baseline":
+        callback.append(checkpoint_callback)
+    elif args.experiment_name == "prune":
+        callback.append(prune_callback)
+    elif args.experiment_name == "dropback":
+        callback.append(checkpoint_callback)
+    
+
+    tune_asha(
+        num_samples=1, 
+        num_epochs=400, 
+        gpus_per_trial=1,
+        deterministic=False,
+        datamodule=cifar10_dm,
+        # num_classes=100,
+        callback=callback,
+        checkpoint_path=checkpoint_path,
+        experiment_name=args.experiment_name
+        )
+
+
 def training(
     config, 
     num_epochs=10, 
@@ -129,140 +189,5 @@ def tune_asha(
 
     print("Best hyperparameters found were: ", analysis.best_config)
 
-        
 if __name__ == '__main__':
-    checkpoint_callback = ModelCheckpoint(
-        monitor='ptl/val_loss',
-        filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}',
-        save_top_k=3,
-        mode='min',
-        auto_insert_metric_name=False
-        )
-
-    prune_callback = ModelPruning(
-        pruning_fn='l1_unstructured',
-        parameter_names=["weight", "bias"],
-        amount = lambda epoch: 0.1 if (epoch > 300 and epoch % 50 == 0) else 0,
-        use_global_unstructured=True,
-        verbose=1,
-        )
-    
-    callback = [
-        checkpoint_callback,
-        # prune_callback,
-        TuneReportCallback(
-            metrics = {
-                "loss": "ptl/val_loss",
-                "mean_accuracy": "ptl/val_accuracy_top1",
-                "current_lr": "current_lr",
-            },
-            on="validation_end")
-    ]
-
-    cifar10_dm = cifar_datamodule()
-    tune_asha(
-        num_samples=6, 
-        num_epochs=400, 
-        gpus_per_trial=1,
-        deterministic=False,
-        datamodule=cifar10_dm,
-        # num_classes=100,
-        callback=callback,
-        checkpoint_path=None
-        )
-
-
-# def training_w_checkpoint(config, checkpoint_dir = None, num_epochs=10, num_gpus=0):
-    
-#     seed_everything(42, workers=True)
-
-#     trainer = pl.Trainer(
-#         max_epochs=num_epochs,
-#         # If fractional GPUs passed in, convert to int.
-#         gpus=math.ceil(num_gpus),
-#         logger=TensorBoardLogger(
-#             save_dir=tune.get_trial_dir(), name="", version="."),
-#         progress_bar_refresh_rate=0,
-#         deterministic=True,
-#         callbacks=
-#         [
-#             ModelCheckpoint(
-#                 monitor='ptl/val_loss',
-#                 filename='epoch{epoch:02d}-top1_accuracy{ptl/val_accuracy_top1:.2f}',
-#                 save_top_k=3,
-#                 mode='min',
-#             ),
-#             TuneReportCheckpointCallback(
-#                 metrics = {
-#                     "loss": "ptl/val_loss",
-#                     "mean_accuracy": "ptl/val_accuracy_top1",
-#                     "current_lr": "current_lr",
-#                 },
-#                 filename="checkpoint",
-#                 on="validation_end")
-#         ]
-#     )
-    
-#     if checkpoint_dir:
-#         # Currently, this leads to errors:
-#         # model = LightningMNISTClassifier.load_from_checkpoint(
-#         #     os.path.join(checkpoint, "checkpoint"))
-#         # Workaround:
-#         ckpt = pl_load(
-#             os.path.join(checkpoint_dir, "checkpoint"),
-#             map_location=lambda storage, loc: storage)
-#         model = ExperimentModel._load_model_state(
-#             ckpt, config=config)
-#         trainer.current_epoch = ckpt["epoch"]
-#     else:
-#         model = ExperimentModel(config=config)
-        
-#     trainer.fit(model, datamodule=cifar10_dm) 
-
-
-# def tune_pbt(
-#     num_samples=10, 
-#     num_epochs=10, 
-#     gpus_per_trial=0, 
-#     ):
-#     config = {
-#         "lr": 0.1,
-#         "momentum": 0.9,
-#         "weight_decay": 4e-5,
-#     }
-    
-#     scheduler = PopulationBasedTraining(
-#         perturbation_interval=4,
-#         hyperparam_mutations={
-#             "lr": tune.loguniform(1e-4, 1e-1),
-#         }
-#     )
-
-#     reporter = JupyterNotebookReporter(
-#         overwrite=False,
-#         parameter_columns=["lr", "momentum"],
-#         metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
-#     )
-# #     reporter = CLIReporter(
-# #         parameter_columns=["lr", "momentum"],
-# #         metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
-
-#     analysis = tune.run(
-#         tune.with_parameters(
-#             training_w_checkpoint,
-#             num_epochs=num_epochs,
-#             num_gpus=gpus_per_trial,
-#         ),
-#         resources_per_trial={
-#             "cpu": 2,
-#             "gpu": gpus_per_trial
-#         },
-#         metric="loss",
-#         mode="min",
-#         config=config,
-#         num_samples=num_samples,
-#         scheduler=scheduler,
-#         progress_reporter=reporter,
-#         name="baseline_pbt")
-
-#     print("Best hyperparameters found were: ", analysis.best_config)
+    main()
