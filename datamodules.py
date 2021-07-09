@@ -83,9 +83,8 @@ class cifar_datamodule(pl.LightningDataModule):
     def val_dataloader(self):
         transforms = self.default_transforms()[1] if self.val_transforms is None else self.val_transforms
 
-        dataset = self.DATASET(self.data_dir, train=True, download=False, transform=transforms)
-
         if self.split:
+            dataset = self.DATASET(self.data_dir, train=True, download=False, transform=transforms)
             train_length = len(dataset)
             _, dataset_val = random_split(
                 dataset,
@@ -93,6 +92,7 @@ class cifar_datamodule(pl.LightningDataModule):
                 generator=torch.Generator().manual_seed(self.seed)
             )
         else:
+            dataset = self.DATASET(self.data_dir, train=False, download=False, transform=transforms)
             dataset_val = dataset
         
         loader = DataLoader(
