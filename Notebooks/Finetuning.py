@@ -32,6 +32,7 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.utilities import rank_zero_info
 from pytorch_lightning.utilities.cloud_io import load as pl_load
 
 import torchmetrics
@@ -47,14 +48,32 @@ from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneRepor
 # +
 model = models.mobilenet_v2()
 
-print(model)
+for name, param in model.named_modules():
+    if isinstance(param, torch.nn.Conv2d):
+        print(list(param.named_parameters()))
+
+
+# +
+from pytorch_lightning.callbacks.finetuning import BaseFinetuning
+
+class ExperimentFinetuning(BaseFinetuning):
+
+    def __init__(self, train_bn: bool = False):
+        super().__init__()
+        self.train_bn = train_bn
+
+    def freeze_before_training(self, pl_module: pl.LightningModule):
+        rank_zero_info("Freeze features")
+        self.freeze(modules=pl_module.model.features, train_bn=self.train_bn)
+
+    def finetune_function(self, pl_module: pl.LightningModule, epoch: int, optimizer: optim.Optimizer, opt_idx: int):
+        rank_zero_info("Unfreeze features")
+        self.unfreeze_and_add_param_group(modules=pl_module.model.features, optimizer=optimizer, train_bn=self.train_bn)
 
 
 # -
 
-# Import model by load checkpoint
-
-class ExperiementModel(pl.LightningModule):
+class ExperimentModel(pl.LightningModule):
 
     def __init__(
         self,
@@ -63,7 +82,7 @@ class ExperiementModel(pl.LightningModule):
         config = None,
         pre_trained: bool = False,
     ):
-        super(ExperiementModel, self).__init__()
+        super(ExperimentModel, self).__init__()
 
         if config == None:
             config = {
@@ -98,7 +117,6 @@ class ExperiementModel(pl.LightningModule):
         self.train_accuracy_top5 = torchmetrics.Accuracy(top_k=5)
         self.val_accuracy_top1 = torchmetrics.Accuracy(top_k=1)
         self.val_accuracy_top5 = torchmetrics.Accuracy(top_k=5)
-        self.test_accuracy_top1 = torchmetrics.Accuracy(top_k=1)
 
         # self.save_hyperparameters()
 
@@ -106,7 +124,14 @@ class ExperiementModel(pl.LightningModule):
         return self.model(x)
     
     def configure_optimizers(self):
-        optimizer = optim.SGD(self.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
+        parameters = list(self.parameters())
+        trainable_parameters = list(filter(lambda p: p.requires_grad, parameters))
+        rank_zero_info(
+            f"The model will start training with only {len(trainable_parameters)} "
+            f"trainable parameters out of {len(parameters)}."
+        )
+
+        optimizer = optim.SGD(trainable_parameters, lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
         scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 200, 250], gamma=0.1)
         
         return [optimizer], [scheduler]
@@ -149,19 +174,21 @@ class ExperiementModel(pl.LightningModule):
             self.logger.experiment.add_histogram(name, params, self.current_epoch)
 
     def on_load_checkpoint(self, checkpoint: dict) -> None:
+        # To avoid size mismatch when loading the checkpoint
         state_dict = checkpoint["state_dict"]
         model_state_dict = self.state_dict()
         is_changed = False
         for k in state_dict:
             if k in model_state_dict:
                 if state_dict[k].shape != model_state_dict[k].shape:
-                    print(f"Skip loading parameter: {k}, "
-                          f"required shape: {model_state_dict[k].shape}, "
-                          f"loaded shape: {state_dict[k].shape}")
+                    rank_zero_info(
+                        f"Skip loading parameter: {k}, "
+                        f"required shape: {model_state_dict[k].shape}, "
+                        f"loaded shape: {state_dict[k].shape}")
                     state_dict[k] = model_state_dict[k]
                     is_changed = True
             else:
-                print(f"Dropping parameter {k}")
+                rank_zero_info(f"Dropping parameter {k}")
                 is_changed = True
 
         if is_changed:
@@ -172,7 +199,6 @@ class ExperiementModel(pl.LightningModule):
 from torchvision.datasets import CIFAR100
 import torchvision.transforms as transform_lib
 from torch.utils.data import DataLoader, random_split
-
 
 class cifar100_datamodule(pl.LightningDataModule):
     
@@ -288,16 +314,6 @@ cifar10_dm = CIFAR10DataModule(
     test_transforms=test_transforms,
     val_transforms=test_transforms,
 )
-
-import torchvision.datasets as datasets
-
-testset = datasets.CIFAR10(root='~/data', train=False, download=False, transform=test_transforms)
-val_loader = torch.utils.data.DataLoader(testset, batch_size=256, shuffle=True, num_workers=16)
-
-# -
-
-
-
 # +
 def fine_tuning(config, checkpoint_dir = None, num_epochs=10, num_gpus=0):
     
@@ -325,18 +341,19 @@ def fine_tuning(config, checkpoint_dir = None, num_epochs=10, num_gpus=0):
                     "current_lr": "current_lr",
                 },
                 filename="checkpoint",
-                on="validation_end")
+                on="validation_end"),
+#             ExperimentFinetuning(),
         ]
     )
     
     ckpt_path = "/data/sunxd/ray_results/baseline/training_fcb72_00000_0_2021-07-05_14-35-58/checkpoints/epoch=152-step=24020.ckpt"
-#     model = ExperiementModel.load_from_checkpoint(ckpt_path, config=config, num_classes=100)
-    model = ExperiementModel.load_from_checkpoint(ckpt_path, config=config)
+#     model = ExperimentModel.load_from_checkpoint(ckpt_path, config=config)
 #     trainer.fit(model, datamodule=cifar10_dm) 
-    trainer.test(model, datamodule=cifar10_dm)
+#     trainer.test(model, datamodule=cifar10_dm)
+    model = ExperimentModel.load_from_checkpoint(ckpt_path, config=config, num_classes=100)  
+    cifar100_dm = cifar100_datamodule()
     
-#     cifar100_dm = cifar100_datamodule()
-#     trainer.fit(model, datamodule=cifar100_dm) 
+    trainer.fit(model, datamodule=cifar100_dm) 
     
 def tune_asha(
     num_samples=10, 
@@ -355,14 +372,14 @@ def tune_asha(
         grace_period=1,
         reduction_factor=2)
 
-    reporter = JupyterNotebookReporter(
-        overwrite=False,
-        parameter_columns=["lr", "momentum"],
-        metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
-    )
-#     reporter = CLIReporter(
+#     reporter = JupyterNotebookReporter(
+#         overwrite=False,
 #         parameter_columns=["lr", "momentum"],
-#         metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
+#         metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
+#     )
+    reporter = CLIReporter(
+        parameter_columns=["lr", "momentum"],
+        metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
 
     analysis = tune.run(
         tune.with_parameters(

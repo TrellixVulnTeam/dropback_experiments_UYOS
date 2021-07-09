@@ -161,7 +161,7 @@ class Dropback(torch.optim.SGD):
         self.dump_flag = False
 
 
-class ExperiementModel(pl.LightningModule):
+class ExperimentModel(pl.LightningModule):
 
     def __init__(
         self,
@@ -170,7 +170,7 @@ class ExperiementModel(pl.LightningModule):
         config = None,
         pre_trained: bool = False,
     ):
-        super(ExperiementModel, self).__init__()
+        super(ExperimentModel, self).__init__()
 
         
         if config == None:
@@ -289,7 +289,7 @@ cifar10_dm = CIFAR10DataModule(
 
 def train_debug(config, num_epochs=10, num_gpus=0):
     # data_dir = os.path.expanduser("./data")
-    model = ExperiementModel(config=config)
+    model = ExperimentModel(config=config)
     model.datamodule = cifar10_dm
     trainer = pl.Trainer(
         max_epochs=num_epochs,
@@ -302,7 +302,7 @@ def train_debug(config, num_epochs=10, num_gpus=0):
 
 def training(config, num_epochs=10, num_gpus=0):
     # data_dir = os.path.expanduser("./data")
-    model = ExperiementModel(config=config)
+    model = ExperimentModel(config=config)
     model.datamodule = cifar10_dm
     trainer = pl.Trainer(
         max_epochs=num_epochs,

@@ -45,9 +45,8 @@ from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
 from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneReportCheckpointCallback
 
 
-# -
-
-class ExperiementModel(pl.LightningModule):
+# +
+class ExperimentModel(pl.LightningModule):
 
     def __init__(
         self,
@@ -56,7 +55,7 @@ class ExperiementModel(pl.LightningModule):
         config = None,
         pre_trained: bool = False,
     ):
-        super(ExperiementModel, self).__init__()
+        super(ExperimentModel, self).__init__()
 
         if config == None:
             config = {
@@ -82,7 +81,9 @@ class ExperiementModel(pl.LightningModule):
                    (6, 160, 3, 2),
                    (6, 320, 1, 1)]
 
-            self.model = models.mobilenet_v2(pretrained=self.pre_trained, num_classes=self.num_classes, inverted_residual_setting=cfg)
+            self.model = models.mobilenet_v2(pretrained=self.pre_trained, 
+                                             num_classes=self.num_classes, 
+                                             inverted_residual_setting=cfg)
         
         else:
             self.model = models.__dict__[self.arch](pretrained=self.pre_trained, num_classes=self.num_classes)
@@ -99,8 +100,12 @@ class ExperiementModel(pl.LightningModule):
     
     def configure_optimizers(self):
         optimizer = optim.SGD(self.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 200, 250], gamma=0.1)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250, 300], gamma=0.1)
+#         scheduler = lr_scheduler.ReduceLROnPlateau(
+#             optimizer, mode='min', factor=0.1, patience=20, threshold=1e-1, threshold_mode='abs', 
+#             min_lr=0.001, verbose=True)
         
+#         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "ptl/val_loss"}
         return [optimizer], [scheduler]
 
     def training_step(self, train_batch, batch_idx):
@@ -124,11 +129,14 @@ class ExperiementModel(pl.LightningModule):
         self.log("ptl/val_loss", loss)
         self.log("ptl/val_accuracy_top1", self.val_accuracy_top1(pred, y))
         self.log("ptl/val_accuracy_top5", self.val_accuracy_top5(pred, y))
-        self.log("current_lr", self.trainer.lr_schedulers[0]["scheduler"].get_last_lr()[0])
+        # SDG
+#         self.log("current_lr", self.trainer.lr_schedulers[0]["scheduler"].get_last_lr()[0])
+        optimizer = self.trainer.optimizers[0]
+        self.log("current_lr", optimizer.param_groups[0]["lr"])
         
     def training_epoch_end(self,outputs):
         for name, params in self.named_parameters():
-            self.logger.experiment.add_histogram(name, params, self.current_epoch)
+            self.logger.experiment.add_histogram(name, params, self.current_epoch)   
 
     def test_step(self, *args, **kwargs):
         return self.validation_step(*args, **kwargs)
@@ -149,20 +157,30 @@ test_transforms = torchvision.transforms.Compose([
 
 cifar10_dm = CIFAR10DataModule(
     data_dir="~/data",
-    batch_size=256,
+    batch_size=128,
     num_workers=8,
     train_transforms=train_transforms,
     test_transforms=test_transforms,
     val_transforms=test_transforms,
 )
 
+import torchvision.datasets as datasets
+
+trainset = datasets.CIFAR10(root='~/data', train=True,
+                                        download=False, transform=train_transforms)
+train_loader = torch.utils.data.DataLoader(trainset, batch_size=256, shuffle=True, num_workers=16)
+
+testset = datasets.CIFAR10(root='~/data', train=False,
+                                       download=False, transform=test_transforms)
+val_loader = torch.utils.data.DataLoader(testset, batch_size=256, shuffle=True, num_workers=16)
+
 
 # +
 def training(config, num_epochs=10, num_gpus=0):
 
-    seed_everything(42, workers=True)
+#     seed_everything(42, workers=True)
     
-    model = ExperiementModel(config=config)
+    model = ExperimentModel(config=config)
 
     trainer = pl.Trainer(
         max_epochs=num_epochs,
@@ -171,11 +189,12 @@ def training(config, num_epochs=10, num_gpus=0):
         logger=TensorBoardLogger(
             save_dir=tune.get_trial_dir(), name="", version="."),
         progress_bar_refresh_rate=0,
-        deterministic=True,
+#         deterministic=True,
         callbacks=
         [
             ModelCheckpoint(
                 monitor='ptl/val_loss',
+                filename='epoch{epoch:02d}-top1_accuracy{val_accuracy_top1:.2f}',
                 save_top_k=3,
                 mode='min',
             ),
@@ -189,7 +208,12 @@ def training(config, num_epochs=10, num_gpus=0):
         ]
     )
     
-    trainer.fit(model, datamodule=cifar10_dm) 
+    trainer.fit(
+        model, 
+#         datamodule=cifar10_dm,
+        train_dataloader=train_loader, 
+        val_dataloaders=val_loader,
+    ) 
 
 
 def tune_asha(
@@ -206,11 +230,11 @@ def tune_asha(
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,
-        grace_period=1,
+        grace_period=50,
         reduction_factor=2)
 
     reporter = JupyterNotebookReporter(
-        overwrite=True,
+        overwrite=False,
         parameter_columns=["lr", "momentum"],
         metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
     )
@@ -256,6 +280,7 @@ def training_w_checkpoint(config, checkpoint_dir = None, num_epochs=10, num_gpus
         [
             ModelCheckpoint(
                 monitor='ptl/val_loss',
+                filename='epoch{epoch:02d}-top1_accuracy{ptl/val_accuracy_top1:.2f}',
                 save_top_k=3,
                 mode='min',
             ),
@@ -278,11 +303,11 @@ def training_w_checkpoint(config, checkpoint_dir = None, num_epochs=10, num_gpus
         ckpt = pl_load(
             os.path.join(checkpoint_dir, "checkpoint"),
             map_location=lambda storage, loc: storage)
-        model = ExperiementModel._load_model_state(
+        model = ExperimentModel._load_model_state(
             ckpt, config=config)
         trainer.current_epoch = ckpt["epoch"]
     else:
-        model = ExperiementModel(config=config)
+        model = ExperimentModel(config=config)
         
     trainer.fit(model, datamodule=cifar10_dm) 
 
@@ -337,6 +362,36 @@ def tune_pbt(
 
 # -
 
+def fine_tuning_test():
+    
+    num_epochs=10
+    num_gpus=1
+#     seed_everything(42, workers=True)
+    
+    model = ExperimentModel()
+
+    trainer = pl.Trainer(
+        max_epochs=num_epochs,
+        # If fractional GPUs passed in, convert to int.
+        gpus=[6],
+        logger=TensorBoardLogger(
+            save_dir="./log"),
+        progress_bar_refresh_rate=30,
+#         deterministic=True,
+        callbacks=[
+            ModelCheckpoint(
+                monitor='ptl/val_loss',
+                filename='{epoch:02d}-{val_accuracy_top1:.2f}',
+                save_top_k=3,
+                mode='min',
+            ),
+        ]
+    )
+    
+    trainer.fit(model, datamodule=cifar10_dm) 
+
+
 if __name__== "__main__":
     tune_asha(num_samples=1, num_epochs=350, gpus_per_trial=1)
 #     tune_pbt(num_samples=4, num_epochs=350, gpus_per_trial=1)
+#     fine_tuning_test()
