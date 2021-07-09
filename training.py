@@ -24,7 +24,8 @@ def training(
     datamodule=None,
     num_classes=100,
     callback: list = None,
-    checkpoint_path=None
+    checkpoint_path=None,
+    experiment_name = "baseline"
     ):
 
     if deterministic:
@@ -42,9 +43,17 @@ def training(
     )
 
     if checkpoint_path:
-        model = ExperimentModel.load_from_checkpoint(checkpoint_path, config=config, num_classes=num_classes)  
+        model = ExperimentModel.load_from_checkpoint(
+            checkpoint_path, 
+            config=config, 
+            num_classes=num_classes,
+            experiment=experiment_name
+            )  
     else:
-        model = ExperimentModel(config=config)
+        model = ExperimentModel(
+            config=config,
+            experiment=experiment_name
+            )
 
     trainer.fit(
         model, 
@@ -60,7 +69,7 @@ def tune_asha(
     num_classes=100,
     callback: list = None,
     checkpoint_path=None,
-    experiement_name="baseline"
+    experiment_name="baseline"
     ):
 
     config = {
@@ -69,6 +78,16 @@ def tune_asha(
         "momentum": 0.9,
         "weight_decay": 4e-5,
     }
+
+#     config = {
+# #         "lr": tune.loguniform(1e-4, 1e-1),
+#         "lr": 0.1,
+#         "momentum": 0.9,
+#         "weight_decay": 4e-5,
+#         # "batch_size": tune.choice([32, 64, 128]),
+#         "track_size": 140000,
+#         "init_decay": 0.1,
+#     }
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,
@@ -93,7 +112,8 @@ def tune_asha(
             datamodule=datamodule,
             num_classes=num_classes,
             callback=callback,
-            checkpoint_path=checkpoint_path
+            checkpoint_path=checkpoint_path,
+            experiment_name=experiment_name
         ),
         resources_per_trial={
             "cpu": 2,
@@ -105,7 +125,7 @@ def tune_asha(
         num_samples=num_samples,
         scheduler=scheduler,
         progress_reporter=reporter,
-        name=experiement_name)
+        name=experiment_name)
 
     print("Best hyperparameters found were: ", analysis.best_config)
 
@@ -122,7 +142,7 @@ if __name__ == '__main__':
     prune_callback = ModelPruning(
         pruning_fn='l1_unstructured',
         parameter_names=["weight", "bias"],
-        amount = lambda epoch: 0.1 if (epoch > 100 and epoch % 50 == 0) else 0,
+        amount = lambda epoch: 0.1 if (epoch > 300 and epoch % 50 == 0) else 0,
         use_global_unstructured=True,
         verbose=1,
         )

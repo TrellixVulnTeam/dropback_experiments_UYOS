@@ -22,6 +22,7 @@ class ExperimentModel(pl.LightningModule):
         num_classes: int = 10, 
         config = None,
         pre_trained: bool = False,
+        experiment: str = "baseline"
     ):
         super(ExperimentModel, self).__init__()
 
@@ -45,6 +46,7 @@ class ExperimentModel(pl.LightningModule):
         self.arch = arch
         self.num_classes = num_classes
         self.pre_trained = pre_trained
+        self.experiment = experiment
         
         if arch == "mobilenet_v2":
             cfg = [(1,  16, 1, 1),
@@ -78,7 +80,9 @@ class ExperimentModel(pl.LightningModule):
             f"trainable parameters out of {len(parameters)}."
         )
 
-        use_dropback = False
+        
+        use_dropback = True if (self.experiment == "dropback") else False
+
         if use_dropback:
             optimizer = Dropback(
                 self.parameters(), 
@@ -99,7 +103,7 @@ class ExperimentModel(pl.LightningModule):
         
             return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "ptl/val_loss"}
         
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250, 350], gamma=0.1)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250], gamma=0.1)
         return [optimizer], [scheduler]
 
     def training_step(self, train_batch, batch_idx):
@@ -137,9 +141,16 @@ class ExperimentModel(pl.LightningModule):
         self.log_dict({'test_loss': loss, 'test_acc': accuracy})
         
     def training_epoch_end(self,outputs):
-        model_pruned = False
-        use_mask = True
-        threshold = 0
+        if self.experiment == "dropback":
+            model_pruned = True
+            use_mask = False
+            threshold = 1e-4
+        elif self.experiment == "prune":
+            model_pruned = True
+            use_mask = True
+            threshold = 0
+        else:
+            model_pruned = False
 
         if model_pruned:
             num_zeros, num_elements, sparsity = measure_global_sparsity(self.model, threshold=threshold, weight=True, bias=False, use_mask=use_mask)
@@ -151,7 +162,7 @@ class ExperimentModel(pl.LightningModule):
                 for name, module in self.named_modules():
                     if hasattr(module, 'weight'):
                         self.logger.experiment.add_histogram(name, module.weight, self.current_epoch)
-                    if hasattr(module, 'bias'):
+                    if hasattr(module, 'bias') and module.bias is not None:
                         self.logger.experiment.add_histogram(name, module.bias, self.current_epoch)
             else:
                 for name,params in self.named_parameters():
