@@ -57,9 +57,9 @@ def main():
     ]
 
     cifar10_dm = cifar_datamodule()
-    # cifar100_dm = cifar_datamodule(dataset="cifar100")
+    cifar100_dm = cifar_datamodule(dataset="cifar100")
 
-    checkpoint_path = None
+    checkpoint_path = "./prune-val_accuracy0.88.ckpt"
 
     if args.experiment_name == "baseline":
         callback.append(checkpoint_callback)
@@ -68,13 +68,17 @@ def main():
         callback.append(prune_checkpoint_callback)
     elif args.experiment_name == "dropback":
         callback.append(checkpoint_callback)
-    
+    elif args.experiment_name == "prune_finetuning":
+        callback.append(checkpoint_callback)
+    elif args.experiment_name == "dropback_finetuning":
+        callback.append(checkpoint_callback)
+
     tune_asha(
         num_samples=4, 
         num_epochs=2350 if args.experiment_name == "prune" else 400, 
         gpus_per_trial=1,
         deterministic=False,
-        datamodule=cifar10_dm,
+        datamodule=cifar100_dm if args.experiment_name in ["prune_finetuning", "dropback_finetuning"] else cifar10_dm,
         # num_classes=100,
         callback=callback,
         checkpoint_path=checkpoint_path,
@@ -138,7 +142,7 @@ def tune_asha(
     experiment_name="baseline"
     ):
 
-    if experiment_name == "dropback":
+    if experiment_name in ["dropback", "dropback_finetuning"]:
         config = {
             "lr": 0.1,
             "momentum": 0.9,

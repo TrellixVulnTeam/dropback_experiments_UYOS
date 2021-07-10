@@ -139,11 +139,11 @@ class ExperimentModel(pl.LightningModule):
         self.log_dict({'test_loss': loss, 'test_acc': accuracy})
         
     def training_epoch_end(self,outputs):
-        if self.experiment == "dropback":
+        if self.experiment in ["dropback", "dropback_finetuning"]:
             model_pruned = True
             use_mask = False
             threshold = 1e-4
-        elif self.experiment == "prune":
+        elif self.experiment == ["prune", "prune_finetuning"]:
             model_pruned = True
             use_mask = True
             threshold = 0
