@@ -1,15 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=bash    # create a short name for your job
-#SBATCH --cpus-per-task=8        # cpu-cores per task (>1 if multi-threaded tasks)
-#SBATCH --mem=24G                # total memory per node (4 GB per cpu-core is default)
-#SBATCH --gres=gpu:4             # number of gpus per node
-#SBATCH --time=45:00:00          # total run time limit (HH:MM:SS)
-#SBATCH --partition=vip
+#SBATCH --job-name=bash    
+#SBATCH --cpus-per-task=16        
+#SBATCH --mem=96G                
+#SBATCH --gres=gpu:4             
+#SBATCH --time=45:00:00          
 #SBATCH --mail-user=sunxd@ece.ubc.ca
+##SBATCH --partition=vip
 
 source ~/miniconda3/bin/activate
 conda activate base
 
-nvidia-smi
-# python Baseline_pruning.py
 python training.py --experiment_name prune

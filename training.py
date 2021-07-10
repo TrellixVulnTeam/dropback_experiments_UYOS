@@ -11,8 +11,8 @@ from pytorch_lightning.utilities import rank_zero_info
 
 from ray import tune
 from ray.tune import CLIReporter, JupyterNotebookReporter
-from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
-from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneReportCheckpointCallback
+from ray.tune.schedulers import ASHAScheduler
+from ray.tune.integration.pytorch_lightning import TuneReportCallback
 
 from models import ExperimentModel
 from datamodules import cifar_datamodule
@@ -23,7 +23,7 @@ parser.add_argument("--experiment_name", default="baseline")
 def main():
     args = parser.parse_args()
 
-    # rank_zero_info(f"Experiment name is: {args.experiment_name}")
+    rank_zero_info(f"Experiment name is: {args.experiment_name}")
 
     prune_checkpoint_callback = ModelCheckpoint(
         filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}',
@@ -47,8 +47,6 @@ def main():
         )
     
     callback = [
-        # checkpoint_callback,
-        # prune_callback,
         TuneReportCallback(
             metrics = {
                 "loss": "ptl/val_loss",
@@ -71,10 +69,9 @@ def main():
     elif args.experiment_name == "dropback":
         callback.append(checkpoint_callback)
     
-
     tune_asha(
         num_samples=4, 
-        num_epochs=2350, 
+        num_epochs=2350 if args.experiment_name == "prune" else 400, 
         gpus_per_trial=1,
         deterministic=False,
         datamodule=cifar10_dm,
@@ -102,13 +99,13 @@ def training(
     
     trainer = pl.Trainer(
         max_epochs=num_epochs,
-        # If fractional GPUs passed in, convert to int.
-        gpus=math.ceil(num_gpus),
+        gpus=math.ceil(num_gpus),           # If fractional GPUs passed in, convert to int.
         logger=TensorBoardLogger(
             save_dir=tune.get_trial_dir(), name="", version="."),
         progress_bar_refresh_rate=0,
         deterministic=deterministic,
         callbacks=callback,
+        log_every_n_steps=300 if experiment_name == "prune" else 50,
     )
 
     if checkpoint_path:
@@ -141,22 +138,20 @@ def tune_asha(
     experiment_name="baseline"
     ):
 
-    config = {
-#         "lr": tune.loguniform(1e-4, 1e-1),
-        "lr": 0.1,
-        "momentum": 0.9,
-        "weight_decay": 4e-5,
-    }
-
-#     config = {
-# #         "lr": tune.loguniform(1e-4, 1e-1),
-#         "lr": 0.1,
-#         "momentum": 0.9,
-#         "weight_decay": 4e-5,
-#         # "batch_size": tune.choice([32, 64, 128]),
-#         "track_size": 140000,
-#         "init_decay": 0.1,
-#     }
+    if experiment_name == "dropback":
+        config = {
+            "lr": 0.1,
+            "momentum": 0.9,
+            "weight_decay": 4e-5,
+            "track_size": 111835,
+            "init_decay": 0.1,
+        }
+    else:
+        config = {
+            "lr": 0.1,
+            "momentum": 0.9,
+            "weight_decay": 4e-5,
+        }
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,

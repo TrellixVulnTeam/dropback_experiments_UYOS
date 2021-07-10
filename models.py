@@ -80,7 +80,6 @@ class ExperimentModel(pl.LightningModule):
             f"trainable parameters out of {len(parameters)}."
         )
 
-        
         use_dropback = True if (self.experiment == "dropback") else False
 
         if use_dropback:
@@ -127,7 +126,6 @@ class ExperimentModel(pl.LightningModule):
         self.log("ptl/val_loss", loss)
         self.log("ptl/val_accuracy_top1", self.val_accuracy_top1(pred, y))
         self.log("ptl/val_accuracy_top5", self.val_accuracy_top5(pred, y))
-        # self.log("current_lr", self.trainer.lr_schedulers[0]["scheduler"].get_last_lr()[0])
         self.log("current_lr", self.trainer.optimizers[0].param_groups[0]["lr"])
         
     def test_step(self, test_batch, batch_idx):
@@ -153,7 +151,7 @@ class ExperimentModel(pl.LightningModule):
             model_pruned = False
 
         if model_pruned:
-            num_zeros, num_elements, sparsity = measure_global_sparsity(self.model, threshold=threshold, weight=True, bias=False, use_mask=use_mask)
+            num_zeros, num_elements, sparsity = measure_global_sparsity(self.model, threshold=threshold, weight=True, bias=True, use_mask=use_mask)
             self.log("num_zeros", num_zeros)
             self.log("num_elements", num_elements)
             self.log("sparsity", sparsity)
