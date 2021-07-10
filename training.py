@@ -59,7 +59,8 @@ def main():
     cifar10_dm = cifar_datamodule()
     cifar100_dm = cifar_datamodule(dataset="cifar100")
 
-    checkpoint_path = "./prune-val_accuracy0.88.ckpt"
+    # checkpoint_path = "/data/sunxd/dropback_experiments/prune-val_accuracy0.88.ckpt"
+    checkpoint_path = None
 
     if args.experiment_name == "baseline":
         callback.append(checkpoint_callback)
@@ -78,8 +79,9 @@ def main():
         num_epochs=2350 if args.experiment_name == "prune" else 400, 
         gpus_per_trial=1,
         deterministic=False,
-        datamodule=cifar100_dm if args.experiment_name in ["prune_finetuning", "dropback_finetuning"] else cifar10_dm,
-        # num_classes=100,
+        # datamodule=cifar100_dm if args.experiment_name in ["prune_finetuning", "dropback_finetuning"] else cifar10_dm,
+        datamodule=cifar100_dm,
+        num_classes=100,
         callback=callback,
         checkpoint_path=checkpoint_path,
         experiment_name=args.experiment_name
@@ -119,10 +121,12 @@ def training(
             num_classes=num_classes,
             experiment=experiment_name
             )  
+        rank_zero_info(f"Checkpoint {checkpoint_path} loaded.")
     else:
         model = ExperimentModel(
             config=config,
-            experiment=experiment_name
+            experiment=experiment_name,
+            num_classes=num_classes
             )
 
     trainer.fit(

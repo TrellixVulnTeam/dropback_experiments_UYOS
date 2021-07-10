@@ -143,7 +143,7 @@ class ExperimentModel(pl.LightningModule):
             model_pruned = True
             use_mask = False
             threshold = 1e-4
-        elif self.experiment == ["prune", "prune_finetuning"]:
+        elif self.experiment in ["prune", "prune_finetuning"]:
             model_pruned = True
             use_mask = True
             threshold = 0
