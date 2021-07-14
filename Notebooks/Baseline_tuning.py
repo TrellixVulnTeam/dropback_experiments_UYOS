@@ -261,6 +261,8 @@ def tune_asha(
         name="baseline")
 
     print("Best hyperparameters found were: ", analysis.best_config)
+# -
+
 
 
 # +
@@ -360,8 +362,7 @@ def tune_pbt(
     print("Best hyperparameters found were: ", analysis.best_config)
 
 
-# -
-
+# +
 def fine_tuning_test():
     
     num_epochs=10
@@ -388,8 +389,13 @@ def fine_tuning_test():
         ]
     )
     
-    trainer.fit(model, datamodule=cifar10_dm) 
+    from pprint import pprint
+    pprint(trainer.__dict__)
+    
+#     trainer.fit(model, datamodule=cifar10_dm) 
 
+fine_tuning_test()
+# -
 
 if __name__== "__main__":
     tune_asha(num_samples=1, num_epochs=350, gpus_per_trial=1)

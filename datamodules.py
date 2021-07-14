@@ -1,20 +1,20 @@
+from typing import Sequence
+
 import torch
-from torch.functional import split
 from torch.utils.data import DataLoader, random_split
 
 import torchvision
-from torchvision.datasets import CIFAR10, CIFAR100
+from torchvision.datasets import CIFAR10
 
 import pytorch_lightning as pl
 
 from pl_bolts.transforms.dataset_normalizations import cifar10_normalization
 
-
-class cifar_datamodule(pl.LightningDataModule):
+from datasets import TrialCifar100
+class cifar10_datamodule(pl.LightningDataModule):
     
     def __init__(
         self,
-        dataset: str = "cifar10",
         data_dir:str = "~/data",
         num_workers:int = 8,
         batch_size: int = 256,
@@ -29,14 +29,7 @@ class cifar_datamodule(pl.LightningDataModule):
         ):
         super().__init__(*args, **kwargs)
         self.dims = (3, 32, 32)
-
-        if dataset == "cifar10":
-            self.DATASET = CIFAR10
-        elif dataset == "cifar100":
-            self.DATASET = CIFAR100
-        else:
-            raise ValueError('Only \'cifar10\' and \'cifar100\' are supported.')
-        
+        self.DATASET = CIFAR10
         self.data_dir = data_dir
         self.num_workers = num_workers
         self.batch_size = batch_size
@@ -50,14 +43,14 @@ class cifar_datamodule(pl.LightningDataModule):
         
     @property
     def num_classes(self):
-        return 100
+        return 10
     
     def prepare_data(self):
         self.DATASET(root=self.data_dir, train=True, download=True, transform=torchvision.transforms.ToTensor())
         self.DATASET(root=self.data_dir, train=False, download=True, transform=torchvision.transforms.ToTensor())
         
     def train_dataloader(self):
-        transforms = self.default_transforms()[0] if self.train_transforms is None else self.train_transforms
+        transforms, _ = self.default_transforms()
 
         dataset = self.DATASET(self.data_dir, train=True, download=False, transform=transforms)
         if self.split:
@@ -81,7 +74,7 @@ class cifar_datamodule(pl.LightningDataModule):
         return loader
 
     def val_dataloader(self):
-        transforms = self.default_transforms()[1] if self.val_transforms is None else self.val_transforms
+        _, transforms = self.default_transforms()
 
         if self.split:
             dataset = self.DATASET(self.data_dir, train=True, download=False, transform=transforms)
@@ -106,7 +99,7 @@ class cifar_datamodule(pl.LightningDataModule):
         return loader
 
     def test_dataloader(self):
-        transforms = self.default_transforms()[1] if self.test_transforms is None else self.test_transforms
+        _, transforms = self.default_transforms()
 
         dataset = self.DATASET(self.data_dir, train=False, download=False, transform=transforms)
         loader = DataLoader(
@@ -132,4 +125,82 @@ class cifar_datamodule(pl.LightningDataModule):
             cifar10_normalization(),
         ])
         return [default_train_transforms, default_val_transform]
+
+class cifar100_datamodule(pl.LightningDataModule):
     
+    def __init__(
+        self,
+        data_dir:str = "~/data",
+        num_workers:int = 8,
+        batch_size: int = 256,
+        shuffle: bool = False,
+        pin_memory: bool = False,
+        drop_last: bool = False,
+        labels: Sequence = range(100),
+        *args,
+        **kwargs,
+        ):
+        super().__init__(*args, **kwargs)
+        self.dims = (3, 32, 32)
+        self.data_dir = data_dir
+        self.num_workers = num_workers
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.pin_memory = pin_memory
+        self.drop_last = drop_last
+        self.lables = labels
+        
+    @property
+    def num_classes(self):
+        return len(self.lables)
+    
+    def prepare_data(self):
+        TrialCifar100(root=self.data_dir, train=True, download=True, transform=torchvision.transforms.ToTensor(), labels=self.lables)
+        TrialCifar100(root=self.data_dir, train=False, download=True, transform=torchvision.transforms.ToTensor(), labels=self.lables)
+        
+    def train_dataloader(self):
+        transforms, _ = self.default_transforms()
+
+        dataset_train = TrialCifar100(self.data_dir, train=True, download=False, transform=transforms, labels=self.lables)
+        
+        loader = DataLoader(
+            dataset_train,
+            batch_size=self.batch_size,
+            shuffle=self.shuffle,
+            num_workers=self.num_workers,
+            drop_last=self.drop_last,
+            pin_memory=self.pin_memory
+        )
+        return loader
+
+    def val_dataloader(self):
+        _, transforms = self.default_transforms()
+
+        dataset_val = TrialCifar100(self.data_dir, train=False, download=False, transform=transforms, labels=self.lables)
+        
+        loader = DataLoader(
+            dataset_val,
+            batch_size=self.batch_size,
+            shuffle=self.shuffle,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
+            drop_last=self.drop_last
+        )
+        return loader
+
+    def test_dataloader(self):
+        return self.val_dataloader()
+
+    def default_transforms(self):
+        default_train_transforms = torchvision.transforms.Compose([
+            torchvision.transforms.RandomCrop(32, padding=4),
+            torchvision.transforms.RandomHorizontalFlip(),
+            torchvision.transforms.ToTensor(),
+            cifar10_normalization(),
+        ])
+
+        default_val_transform = torchvision.transforms.Compose([
+            torchvision.transforms.ToTensor(),
+            cifar10_normalization(),
+        ])
+        return default_train_transforms, default_val_transform
