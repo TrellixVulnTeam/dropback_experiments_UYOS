@@ -39,6 +39,7 @@ class CIFAR100():
     TEST_FILE_NAME = 'test.pt'
     DATASET_NAME = 'CIFAR100'
     labels = set(range(100))
+    relabel = False
 
     def __init__(
         self, 
@@ -46,11 +47,13 @@ class CIFAR100():
         train: bool = True, 
         transform: Optional[Callable] = None, 
         download: bool = True, 
+        relabel: bool = False
     ):
         super().__init__()
         self.dir_path = data_dir
         self.train = train  # training set or test set
         self.transform = transform
+        self.relabel = relabel
        
         os.makedirs(self.cached_folder_path, exist_ok=True)
         self.prepare_data(download)
@@ -79,7 +82,11 @@ class CIFAR100():
             img = img.numpy().transpose((1, 2, 0))  # convert to HWC
             img = self.transform(Image.fromarray(img))
 
-        return img, target, targets_coarse
+        if self.relabel:
+            target = list(self.labels).index(target)
+
+        # return img, target, targets_coarse
+        return img, target
 
     @classmethod
     def _check_exists(cls, data_folder: str, file_names: Sequence[str]) -> bool:
@@ -115,8 +122,6 @@ class CIFAR100():
         if download:
             self.download(base_path)
         self._extract_archive_save_torch(base_path)
-
-
 
     def download(self, data_folder: str) -> None:
         """Download the data if it doesn't exist in cached_folder_path already."""
@@ -166,18 +171,19 @@ class TrialCifar100(CIFAR100):
         transform: Optional[Callable] = None,
         download: bool = False,
         labels: Optional[Sequence] = (1, 5, 8),
+        relabel:bool = False
     ):
         self.labels = labels if labels else list(range(100))
 
         self.cache_folder_name = f'labels-{"-".join(str(d) for d in sorted(self.labels))}'
 
-        super().__init__(data_dir, train=train, transform=transform, download=download)
+        super().__init__(data_dir=data_dir, train=train, transform=transform, download=download, relabel=relabel)
 
     def prepare_data(self, download: bool) -> None:
         super().prepare_data(download)
                 
         for fname in (self.TRAIN_FILE_NAME, self.TEST_FILE_NAME):
-            path_fname = os.path.join(os.path.join(self.dir_path, self.DATASET_NAME, "complete"), fname)
+            path_fname = os.path.join(os.path.join(self.dir_path, self.DATASET_NAME, self.cache_folder_name), fname)
             assert os.path.isfile(path_fname), 'Missing cached file: %s' % path_fname
             data, targets, targets_coarse = torch.load(path_fname)
             if len(self.labels) < 100:

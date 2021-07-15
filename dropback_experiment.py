@@ -1,13 +1,9 @@
 import math
 
-import torch.optim.lr_scheduler as lr_scheduler
-
 import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.callbacks import ModelPruning
-from pytorch_lightning.utilities.cloud_io import load as pl_load
 from pytorch_lightning.utilities import rank_zero_info
 
 from ray import tune
@@ -15,9 +11,8 @@ from ray.tune import CLIReporter, JupyterNotebookReporter
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
 
-from models import ExperimentModel
-from datamodules import cifar10_datamodule, cifar100_datamodule
-from Dropback import Dropback
+from models import DBModel
+from datamodules import cifar100_datamodule
 
 def main():
     rank_zero_info(f"Experiment name is: dropback")
@@ -31,7 +26,8 @@ def training(config, num_epochs=10, num_gpus=0, checkpoint_path=None):
     if deterministic:
         seed_everything(42, workers=True)
     
-    cifar100_dm = cifar100_datamodule()
+    training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
+    cifar100_dm = cifar100_datamodule(labels=training_labels)
     num_classes = cifar100_dm.num_classes
 
     trainer = pl.Trainer(
@@ -60,10 +56,10 @@ def training(config, num_epochs=10, num_gpus=0, checkpoint_path=None):
     )
 
     if checkpoint_path:
-        model = ExperimentModel.load_from_checkpoint(checkpoint_path, config=config, num_classes=num_classes)  
+        model = DBModel.load_from_checkpoint(checkpoint_path, config=config, num_classes=num_classes)  
         rank_zero_info(f"Checkpoint {checkpoint_path} loaded.")
     else:
-        model = ExperimentModel(config=config, num_classes=num_classes)
+        model = DBModel(config=config, num_classes=num_classes)
 
     trainer.fit(model, datamodule=cifar100_dm) 
 
@@ -81,14 +77,17 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         grace_period=20,
         reduction_factor=2)
 
-    # reporter = JupyterNotebookReporter(
-    #     overwrite=False,
-    #     parameter_columns=["lr", "momentum"],
-    #     metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
-    # )
-    reporter = CLIReporter(
-        parameter_columns=["lr", "momentum"],
-        metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
+    in_jupyter_notebook = False
+    if in_jupyter_notebook:
+        reporter = JupyterNotebookReporter(
+            overwrite=False,
+            parameter_columns=["lr", "momentum"],
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
+        )
+    else:
+        reporter = CLIReporter(
+            parameter_columns=["lr", "momentum"],
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
 
     analysis = tune.run(
         tune.with_parameters(

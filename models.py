@@ -70,11 +70,11 @@ class ExperimentModel(pl.LightningModule):
         if use_ReduceLROnPlateau:
             scheduler = lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=0.1, patience=20, threshold=1e-1, threshold_mode='abs', 
-            min_lr=0.001, verbose=True)
+            min_lr=0.00001, verbose=True)
         
             return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "ptl/val_loss"}
         
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250], gamma=0.1)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250, 350], gamma=0.1)
         return [optimizer], [scheduler]
 
     def training_step(self, train_batch, batch_idx):
@@ -99,7 +99,7 @@ class ExperimentModel(pl.LightningModule):
         self.log("ptl/val_accuracy_top1", self.val_accuracy_top1(pred, y))
         self.log("ptl/val_accuracy_top5", self.val_accuracy_top5(pred, y))
         self.log("current_lr", self.trainer.optimizers[0].param_groups[0]["lr"])
-        
+
     def test_step(self, test_batch, batch_idx):
         x, y = test_batch
         logits = self.forward(x)
@@ -109,11 +109,10 @@ class ExperimentModel(pl.LightningModule):
         accuracy = torch.eq(pred_label, y).sum().item() / (len(y)*1.0)
         
         self.log_dict({'test_loss': loss, 'test_acc': accuracy})
-        
+
     def training_epoch_end(self,outputs):
         for name,params in self.named_parameters():
             self.logger.experiment.add_histogram(name, params,self.current_epoch)
-        
 
     def on_load_checkpoint(self, checkpoint: dict) -> None:
         # To avoid size mismatch when loading the checkpoint

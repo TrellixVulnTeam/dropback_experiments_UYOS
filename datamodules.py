@@ -130,7 +130,7 @@ class cifar100_datamodule(pl.LightningDataModule):
     
     def __init__(
         self,
-        data_dir:str = "~/data",
+        data_dir:str = "/data/sunxd/data",
         num_workers:int = 8,
         batch_size: int = 256,
         shuffle: bool = False,
@@ -155,13 +155,15 @@ class cifar100_datamodule(pl.LightningDataModule):
         return len(self.lables)
     
     def prepare_data(self):
-        TrialCifar100(root=self.data_dir, train=True, download=True, transform=torchvision.transforms.ToTensor(), labels=self.lables)
-        TrialCifar100(root=self.data_dir, train=False, download=True, transform=torchvision.transforms.ToTensor(), labels=self.lables)
+        TrialCifar100(
+            data_dir=self.data_dir, train=True, download=True, transform=torchvision.transforms.ToTensor(), labels=self.lables)
+        TrialCifar100(
+            data_dir=self.data_dir, train=False, download=True, transform=torchvision.transforms.ToTensor(), labels=self.lables)
         
     def train_dataloader(self):
         transforms, _ = self.default_transforms()
 
-        dataset_train = TrialCifar100(self.data_dir, train=True, download=False, transform=transforms, labels=self.lables)
+        dataset_train = TrialCifar100(self.data_dir, train=True, download=False, transform=transforms, labels=self.lables, relabel=True)
         
         loader = DataLoader(
             dataset_train,
@@ -176,7 +178,7 @@ class cifar100_datamodule(pl.LightningDataModule):
     def val_dataloader(self):
         _, transforms = self.default_transforms()
 
-        dataset_val = TrialCifar100(self.data_dir, train=False, download=False, transform=transforms, labels=self.lables)
+        dataset_val = TrialCifar100(self.data_dir, train=False, download=False, transform=transforms, labels=self.lables, relabel=True)
         
         loader = DataLoader(
             dataset_val,
