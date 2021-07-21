@@ -1,5 +1,4 @@
 import math
-import argparse 
 
 import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
@@ -18,19 +17,17 @@ from models import PruneModel
 from datamodules import cifar100_datamodule
 
 def main():
-    rank_zero_info(f"Experiment name is: baseline")
+    rank_zero_info(f"Experiment name is: prune")
 
-    checkpoint_path = None
-    
-    tune_asha(num_samples=4, num_epochs=400, gpus_per_trial=1, checkpoint_path=checkpoint_path)
+    tune_asha(num_samples=1, num_epochs=1000, gpus_per_trial=1)
 
-
-def training(config, num_epochs=10, num_gpus=0, checkpoint_path=None):
-    deterministic = True
+def training(config, num_epochs=10, num_gpus=0):
+    deterministic = False
     if deterministic:
         seed_everything(42, workers=True)
 
-    cifar100_dm = cifar100_datamodule()
+    training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
+    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True)
     num_classes = cifar100_dm.num_classes
     
     trainer = pl.Trainer(
@@ -46,24 +43,31 @@ def training(config, num_epochs=10, num_gpus=0, checkpoint_path=None):
                     "loss": "ptl/val_loss",
                     "mean_accuracy": "ptl/val_accuracy_top1",
                     "current_lr": "current_lr",
+                    "sparsity": "sparsity"
                 },
                 on="validation_end"),
             ModelCheckpoint(
-                filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}',
-                auto_insert_metric_name=False
+                filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}-val_loss{ptl/val_loss:.2f}_sparsity{sparsity:.2f}',
+                auto_insert_metric_name=False,
+                every_n_val_epochs=50,
+                save_top_k=10,
+                monitor="ptl/val_accuracy_top1",
+                mode="max"
                 ),
             ModelPruning(
                 pruning_fn='l1_unstructured',
                 parameter_names=["weight", "bias"],
-                amount = lambda epoch: 0.14 if (epoch > 299 and epoch % 100 == 0 and epoch < 2300) else 0,
+                make_pruning_permanent=False,
+                amount = lambda epoch: 0.1 if epoch % 100 == 0 else 0,
                 use_global_unstructured=True,
                 verbose=1,
                 )
         ]
     )
 
+    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/prune-val_accuracy0.80-val_loss1.43_sparsity0.61.ckpt"
     if checkpoint_path:
-        model = PruneModel.load_from_checkpoint(checkpoint_path, config=config, num_classes=num_classes)  
+        model = PruneModel.load_from_checkpoint(checkpoint_path, config=config, num_classes=num_classes, strict=False)  
         rank_zero_info(f"Checkpoint {checkpoint_path} loaded.")
     else:
         model = PruneModel(config=config, num_classes=num_classes)
@@ -82,14 +86,17 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         grace_period=20,
         reduction_factor=2)
 
-    # reporter = JupyterNotebookReporter(
-    #     overwrite=False,
-    #     parameter_columns=["lr", "momentum"],
-    #     metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
-    # )
-    reporter = CLIReporter(
-        parameter_columns=["lr", "momentum"],
-        metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
+    in_jupyter_notebook = False
+    if in_jupyter_notebook:
+        reporter = JupyterNotebookReporter(
+            overwrite=False,
+            parameter_columns=["lr", "momentum"],
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
+        )
+    else:
+        reporter = CLIReporter(
+            parameter_columns=["lr", "momentum"],
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
 
     analysis = tune.run(
         tune.with_parameters(
@@ -105,9 +112,9 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         mode="min",
         config=config,
         num_samples=num_samples,
-        scheduler=scheduler,
+        # scheduler=scheduler,
         progress_reporter=reporter,
-        name="baseline")
+        name="prune")
 
     print("Best hyperparameters found were: ", analysis.best_config)
 

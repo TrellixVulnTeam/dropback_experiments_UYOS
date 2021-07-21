@@ -2,6 +2,7 @@ import torch
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 import torch.nn.functional as F
+import torch.nn.utils.prune as prune
 
 import torchvision.models as models
 
@@ -135,6 +136,7 @@ class ExperimentModel(pl.LightningModule):
         if is_changed:
             checkpoint.pop("optimizer_states", None)
 
+
 class DBModel(ExperimentModel):
     
     def __init__(
@@ -217,7 +219,11 @@ class PruneModel(ExperimentModel):
         
             return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "ptl/val_loss"}
         
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250], gamma=0.1)
+
+        # scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: 0.1)
+        # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250], gamma=0.1)
+        scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1 if (epoch-50) % 100 == 0 else 1)
+
         return [optimizer], [scheduler]
 
     def training_epoch_end(self,outputs):
@@ -232,4 +238,3 @@ class PruneModel(ExperimentModel):
                 self.logger.experiment.add_histogram(name, module.weight, self.current_epoch)
             if hasattr(module, 'bias') and module.bias is not None:
                 self.logger.experiment.add_histogram(name, module.bias, self.current_epoch)
-

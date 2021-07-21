@@ -16,13 +16,11 @@ from datamodules import cifar100_datamodule
 
 def main():
     rank_zero_info(f"Experiment name is: dropback")
-    
-    checkpoint_path = None
 
-    tune_asha(num_samples=4, num_epochs=400, gpus_per_trial=1, checkpoint_path=checkpoint_path)
+    tune_asha(num_samples=4, num_epochs=400, gpus_per_trial=1)
 
-def training(config, num_epochs=10, num_gpus=0, checkpoint_path=None):
-    deterministic = True
+def training(config, num_epochs=10, num_gpus=0):
+    deterministic = False
     if deterministic:
         seed_everything(42, workers=True)
     
@@ -45,15 +43,16 @@ def training(config, num_epochs=10, num_gpus=0, checkpoint_path=None):
                     "current_lr": "current_lr",
                 },
                 on="validation_end"),
-                ModelCheckpoint(
-                    monitor='ptl/val_loss',
-                    filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}',
-                    save_top_k=3,
-                    mode='min',
-                    auto_insert_metric_name=False
-                ),
+            ModelCheckpoint(
+                monitor='ptl/val_accuracy_top1',
+                filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}-val_loss{ptl/val_loss:.2f}',
+                save_top_k=3,
+                mode='max',
+                auto_insert_metric_name=False
+            ),
         ]
     )
+    checkpoint_path = None
 
     if checkpoint_path:
         model = DBModel.load_from_checkpoint(checkpoint_path, config=config, num_classes=num_classes)  
@@ -103,7 +102,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         mode="min",
         config=config,
         num_samples=num_samples,
-        scheduler=scheduler,
+        # scheduler=scheduler,
         progress_reporter=reporter,
         name="dropback")
 

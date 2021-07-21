@@ -18,9 +18,9 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: baseline")
 
-    tune_asha(num_samples=8, num_epochs=450, gpus_per_trial=1)
+    tune_asha(num_samples=4, num_epochs=450, gpus_per_trial=1)
 
-def training(config, num_epochs=10, num_gpus=0, checkpoint_path=None):
+def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
     if deterministic:
         seed_everything(42, workers=True)
@@ -46,13 +46,15 @@ def training(config, num_epochs=10, num_gpus=0, checkpoint_path=None):
                 on="validation_end"),
             ModelCheckpoint(
                 monitor='ptl/val_accuracy_top1',
-                filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}',
+                filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}-val_loss{ptl/val_loss:.2f}',
                 save_top_k=3,
-                mode='min',
+                mode='max',
                 auto_insert_metric_name=False
             ),
         ],
     )
+
+    checkpoint_path = None
 
     if checkpoint_path:
         model = ExperimentModel.load_from_checkpoint(checkpoint_path, config=config, num_classes=num_classes)
@@ -64,10 +66,16 @@ def training(config, num_epochs=10, num_gpus=0, checkpoint_path=None):
 
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
+    # config = {
+    #     "lr": tune.uniform(0.1, 0.3),
+    #     "momentum": tune.uniform(0.9, 0.99),
+    #     "weight_decay": tune.loguniform(1e-5, 1e-3),
+    # }
+
     config = {
-        "lr": tune.uniform(0.1, 0.3),
-        "momentum": tune.uniform(0.9, 0.99),
-        "weight_decay": tune.loguniform(1e-5, 1e-3),
+        "lr": 0.1,
+        "momentum": 0.9, 
+        "weight_decay": 4e-5,
     }
 
     scheduler = ASHAScheduler(
@@ -101,7 +109,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         mode="min",
         config=config,
         num_samples=num_samples,
-        scheduler=scheduler,
+        # scheduler=scheduler,
         progress_reporter=reporter,
         name="baseline")
 

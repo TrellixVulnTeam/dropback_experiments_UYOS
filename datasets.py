@@ -47,7 +47,8 @@ class CIFAR100():
         train: bool = True, 
         transform: Optional[Callable] = None, 
         download: bool = True, 
-        relabel: bool = False
+        relabel: bool = False,
+        already_prepared: bool = False
     ):
         super().__init__()
         self.dir_path = data_dir
@@ -56,7 +57,7 @@ class CIFAR100():
         self.relabel = relabel
        
         os.makedirs(self.cached_folder_path, exist_ok=True)
-        self.prepare_data(download)
+        if not already_prepared: self.prepare_data(download)
 
         if not self._check_exists(self.cached_folder_path, (self.TRAIN_FILE_NAME, self.TEST_FILE_NAME)):
             raise RuntimeError('Dataset not found.')
@@ -171,13 +172,15 @@ class TrialCifar100(CIFAR100):
         transform: Optional[Callable] = None,
         download: bool = False,
         labels: Optional[Sequence] = (1, 5, 8),
-        relabel:bool = False
+        relabel:bool = False,
+        already_prepared: bool = False
     ):
         self.labels = labels if labels else list(range(100))
-
+        
         self.cache_folder_name = f'labels-{"-".join(str(d) for d in sorted(self.labels))}'
+        self.train = train
 
-        super().__init__(data_dir=data_dir, train=train, transform=transform, download=download, relabel=relabel)
+        super().__init__(data_dir=data_dir, train=train, transform=transform, download=download, relabel=relabel, already_prepared=already_prepared)
 
     def prepare_data(self, download: bool) -> None:
         super().prepare_data(download)

@@ -137,6 +137,7 @@ class cifar100_datamodule(pl.LightningDataModule):
         pin_memory: bool = False,
         drop_last: bool = False,
         labels: Sequence = range(100),
+        already_prepared:bool = False,
         *args,
         **kwargs,
         ):
@@ -149,6 +150,7 @@ class cifar100_datamodule(pl.LightningDataModule):
         self.pin_memory = pin_memory
         self.drop_last = drop_last
         self.lables = labels
+        self.already_prepared = already_prepared
         
     @property
     def num_classes(self):
@@ -156,14 +158,14 @@ class cifar100_datamodule(pl.LightningDataModule):
     
     def prepare_data(self):
         TrialCifar100(
-            data_dir=self.data_dir, train=True, download=True, transform=torchvision.transforms.ToTensor(), labels=self.lables)
+            data_dir=self.data_dir, train=True, download=True, transform=torchvision.transforms.ToTensor(), labels=self.lables, already_prepared=self.already_prepared)
         TrialCifar100(
-            data_dir=self.data_dir, train=False, download=True, transform=torchvision.transforms.ToTensor(), labels=self.lables)
+            data_dir=self.data_dir, train=False, download=True, transform=torchvision.transforms.ToTensor(), labels=self.lables, already_prepared=self.already_prepared)
         
     def train_dataloader(self):
         transforms, _ = self.default_transforms()
 
-        dataset_train = TrialCifar100(self.data_dir, train=True, download=False, transform=transforms, labels=self.lables, relabel=True)
+        dataset_train = TrialCifar100(self.data_dir, train=True, download=False, transform=transforms, labels=self.lables, relabel=True, already_prepared=self.already_prepared)
         
         loader = DataLoader(
             dataset_train,
@@ -178,7 +180,7 @@ class cifar100_datamodule(pl.LightningDataModule):
     def val_dataloader(self):
         _, transforms = self.default_transforms()
 
-        dataset_val = TrialCifar100(self.data_dir, train=False, download=False, transform=transforms, labels=self.lables, relabel=True)
+        dataset_val = TrialCifar100(self.data_dir, train=False, download=False, transform=transforms, labels=self.lables, relabel=True, already_prepared=self.already_prepared)
         
         loader = DataLoader(
             dataset_val,
