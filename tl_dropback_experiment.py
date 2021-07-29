@@ -15,13 +15,13 @@ from ray.tune import CLIReporter, JupyterNotebookReporter
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
 
-from models import PruneModel
+from models import DBModel
 from datamodules import cifar100_datamodule
 
 def main():
-    rank_zero_info(f"Experiment name is: tl_prune")
+    rank_zero_info(f"Experiment name is: tl_dropback")
 
-    tune_asha(num_samples=4, num_epochs=1000, gpus_per_trial=1)
+    tune_asha(num_samples=1, num_epochs=400, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -46,7 +46,6 @@ def training(config, num_epochs=10, num_gpus=0):
                     "loss": "ptl/val_loss",
                     "mean_accuracy": "ptl/val_accuracy_top1",
                     "current_lr": "current_lr",
-                    "sparsity": "sparsity"
                 },
                 on="validation_end"),
             ModelCheckpoint(
@@ -59,21 +58,25 @@ def training(config, num_epochs=10, num_gpus=0):
         ]
     )
 
-    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/prune-val_accuracy0.82-val_loss1.07_sparsity0.95.ckpt"
+    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/dropback-val_accuracy0.79-val_loss1.47.ckpt"
     # checkpoint_path = None
-    if checkpoint_path:
-        model = PruneModel(config=config, num_classes=num_classes)
-        for name, module in model.named_modules():
-            if hasattr(module, "weight") and module.weight is not None: 
-                torch.nn.utils.prune.identity(module, "weight")
-            if hasattr(module, "bias") and module.bias is not None: 
-                torch.nn.utils.prune.identity(module, "bias")
 
+    if checkpoint_path:
         checkpoint = torch.load(checkpoint_path)
+        model = DBModel(config=config, num_classes=num_classes)
         model.load_state_dict(checkpoint['state_dict'])  
+        
+        # Clear the momentum related states
+        checkpoint['optimizer_states'][0]['state'] = {}
+        # Initialize the trainer
+        trainer.max_epochs = 0
+        trainer.fit(model, datamodule=cifar100_dm)
+        trainer.max_epochs = num_epochs
+        trainer.optimizers[0].load_state_dict(checkpoint['optimizer_states'][0])
+
         rank_zero_info(f"Checkpoint {checkpoint_path} loaded.")
     else:
-        model = PruneModel(config=config, num_classes=num_classes)
+        model = DBModel(config=config, num_classes=num_classes)
 
     trainer.fit(model, datamodule=cifar100_dm) 
 
@@ -82,6 +85,8 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         "lr": 0.1,
         "momentum": 0.9,
         "weight_decay": 4e-5,
+        "track_size": 111835,
+        "init_decay": 0.1,
     }
 
     scheduler = ASHAScheduler(
@@ -117,7 +122,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         num_samples=num_samples,
         # scheduler=scheduler,
         progress_reporter=reporter,
-        name="tl_prune")
+        name="tl_dropback_test")
 
     print("Best hyperparameters found were: ", analysis.best_config)
 
