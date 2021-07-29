@@ -21,7 +21,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: prune")
 
-    tune_asha(num_samples=1, num_epochs=1000, gpus_per_trial=1)
+    tune_asha(num_samples=4, num_epochs=1000, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -29,7 +29,7 @@ def training(config, num_epochs=10, num_gpus=0):
         seed_everything(42, workers=True)
 
     training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
-    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True, data_dir="/home/sunxd/data")
+    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True, data_dir="/data/sunxd/data")
     num_classes = cifar100_dm.num_classes
     
     trainer = pl.Trainer(
@@ -68,7 +68,8 @@ def training(config, num_epochs=10, num_gpus=0):
         ]
     )
 
-    checkpoint_path = "/home/sunxd/dropback_experiments/checkpoints/prune-val_accuracy0.80-val_loss1.43_sparsity0.61.ckpt"
+    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/prune-val_accuracy0.82-val_loss1.18_sparsity0.86.ckpt"
+    # checkpoint_path = None
     if checkpoint_path:
         model = PruneModel(config=config, num_classes=num_classes)
         for name, module in model.named_modules():
@@ -77,7 +78,6 @@ def training(config, num_epochs=10, num_gpus=0):
             if hasattr(module, "bias") and module.bias is not None: 
                 torch.nn.utils.prune.identity(module, "bias")
 
-        # model.load_from_checkpoint(checkpoint_path, config=config, num_classes=num_classes)
         checkpoint = torch.load(checkpoint_path)
         model.load_state_dict(checkpoint['state_dict'])  
         rank_zero_info(f"Checkpoint {checkpoint_path} loaded.")

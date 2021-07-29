@@ -48,17 +48,57 @@ def measure_global_sparsity(model, threshold=0, weight=True, bias=False, use_mas
 
     return num_zeros, num_elements, sparsity
 
+
 def compute_final_pruning_rate(pruning_rate, num_iterations):
+    """
+    This function calculate the final pruning rate, given pruning rate of a single iteration 
+    and number of iterations.
+    """
     final_pruning_rate = 1 - (1 - pruning_rate)**num_iterations
 
     return final_pruning_rate
 
+def compute_number_prune_iteration(prune_rate_per_round, target_prune_rate):
+    '''
+    Find the number of iterations needed to achieve a targer_prune_rate given a pruning rate 
+    per iteration.
+
+    Example:
+    print(compute_number_prune_iteration(0.1, 0.95))
+
+    >>> 29
+    '''
+    for x in range(100):
+        if compute_final_pruning_rate(prune_rate_per_round, x) >= target_prune_rate:
+            break
+    
+    return x
+
 def compute_iterative_prune_rate(target_prune_rate, num_iterations):
+    """
+    This function is in conjunction with the function before, it takes in the targat final 
+    pruning rate and number of iterations and calculate the pruning rate of a single iteration
+
+    Example:
+    print(compute_iterative_prune_rate(0.95, 20))
+
+    >>> 0.139
+    """
     iterative_prune_rate = 1 - (1 - target_prune_rate) ** (1 / float(num_iterations))
     
     return iterative_prune_rate
 
-def compute_num_param_to_prune(model, target_prune_rate):
+def compute_num_param_to_keep(model, target_prune_rate):
+    '''
+    Given a model and target pruneing rate, calculate the parameters to keep.
+    Used for deciding dropback experiment parameters.
+
+    Examples:
+    model = models.mobilenet_v2(num_classes=10)
+    print(compute_num_param_to_keep(model, 0.05))
+
+    >>> (2236682, 111835)
+    '''
     num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     num_param_to_prune = math.ceil(num_parameters * target_prune_rate)
     

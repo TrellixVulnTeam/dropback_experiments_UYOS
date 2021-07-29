@@ -11,7 +11,7 @@ from pytorch_lightning.utilities import rank_zero_info
 
 import torchmetrics
 
-from utils import measure_global_sparsity
+from utils import measure_global_sparsity, measure_module_sparsity
 
 from Dropback import Dropback
 
@@ -27,7 +27,6 @@ class ExperimentModel(pl.LightningModule):
                 "weight_decay": 4e-5,
         },
         pre_trained: bool = False,
-        experiment: str = "baseline"
     ):
         super(ExperimentModel, self).__init__()
 
@@ -38,7 +37,6 @@ class ExperimentModel(pl.LightningModule):
         self.arch = arch
         self.num_classes = num_classes
         self.pre_trained = pre_trained
-        self.experiment = experiment
         
         if arch == "mobilenet_v2":
             cfg = [(1,  16, 1, 1),
@@ -221,8 +219,8 @@ class PruneModel(ExperimentModel):
         
 
         # scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: 0.1)
-        # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250], gamma=0.1)
-        scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1 if (epoch-50) % 100 == 0 else 1)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250], gamma=0.1)
+        # scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1 if epoch % 100 >= 50 else 1)
 
         return [optimizer], [scheduler]
 
@@ -238,3 +236,7 @@ class PruneModel(ExperimentModel):
                 self.logger.experiment.add_histogram(name, module.weight, self.current_epoch)
             if hasattr(module, 'bias') and module.bias is not None:
                 self.logger.experiment.add_histogram(name, module.bias, self.current_epoch)
+            
+            # module_num_zeros, module_num_elements, _ = measure_module_sparsity(module, threshold=0, weight=True, bias=True, use_mask=True)
+            # self.log("remaining_params/" + name, module_num_elements - module_num_zeros)
+
