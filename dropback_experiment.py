@@ -68,11 +68,11 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         "momentum": 0.9,
         "weight_decay": 4e-5,
         "track_size": 111835,
-        "init_decay": tune.grid_search([0.99, 0.999]),
+        "init_decay": tune.loguniform(0.99, 0.999),
         "q": 0.95,
-        "q_init": tune.grid_search([1e-2, 1e-3, 1e-4]),
-	    "q_step": tune.grid_search([1e-6, 1e-5, 1e-4]),
-        "sf": False,
+        "q_init": tune.loguniform(1e-4, 1e-2),
+	    "q_step": tune.loguniform(1e-6, 1e-4),
+        "sf": tune.grid_search([False,True])
     }
 
     scheduler = ASHAScheduler(
