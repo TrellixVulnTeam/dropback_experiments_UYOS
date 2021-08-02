@@ -37,7 +37,7 @@ def measure_global_sparsity(model, threshold=0, weight=True, bias=False, use_mas
 
     for module_name, module in model.named_modules():
         module_num_zeros, module_num_elements, _ = measure_module_sparsity(
-            module, weight=weight, bias=bias, use_mask=use_mask)
+            module, threshold=threshold, weight=weight, bias=bias, use_mask=use_mask)
         num_zeros += module_num_zeros
         num_elements += module_num_elements
 

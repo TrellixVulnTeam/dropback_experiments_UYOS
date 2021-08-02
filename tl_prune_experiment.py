@@ -21,7 +21,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: tl_prune")
 
-    tune_asha(num_samples=4, num_epochs=1000, gpus_per_trial=1)
+    tune_asha(num_samples=1, num_epochs=1000, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -30,7 +30,8 @@ def training(config, num_epochs=10, num_gpus=0):
 
     training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
     target_list = (33, 19, 63, 79, 46, 93, 50, 52, 8, 85)
-    cifar100_dm = cifar100_datamodule(labels=target_list, already_prepared=True, data_dir="/data/sunxd/data")
+    target_list_2 = (49, 15, 66, 99, 98, 29, 74, 47, 58, 89)
+    cifar100_dm = cifar100_datamodule(labels=target_list_2, already_prepared=True, data_dir="/data/sunxd/data")
     num_classes = cifar100_dm.num_classes
     
     trainer = pl.Trainer(
@@ -117,7 +118,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         num_samples=num_samples,
         # scheduler=scheduler,
         progress_reporter=reporter,
-        name="tl_prune")
+        name="tl_prune_2")
 
     print("Best hyperparameters found were: ", analysis.best_config)
 

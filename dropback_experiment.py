@@ -17,7 +17,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: dropback")
 
-    tune_asha(num_samples=4, num_epochs=400, gpus_per_trial=1)
+    tune_asha(num_samples=1, num_epochs=350, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -25,7 +25,7 @@ def training(config, num_epochs=10, num_gpus=0):
         seed_everything(42, workers=True)
     
     training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
-    cifar100_dm = cifar100_datamodule(labels=training_labels)
+    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True, data_dir="/data/sunxd/data")
     num_classes = cifar100_dm.num_classes
 
     trainer = pl.Trainer(
@@ -68,12 +68,16 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         "momentum": 0.9,
         "weight_decay": 4e-5,
         "track_size": 111835,
-        "init_decay": 0.1,
+        "init_decay": tune.grid_search([0.99, 0.999]),
+        "q": 0.95,
+        "q_init": tune.grid_search([1e-2, 1e-3, 1e-4]),
+	    "q_step": tune.grid_search([1e-6, 1e-5, 1e-4]),
+        "sf": False,
     }
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,
-        grace_period=20,
+        grace_period=50,
         reduction_factor=2)
 
     in_jupyter_notebook = False
@@ -102,7 +106,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         mode="min",
         config=config,
         num_samples=num_samples,
-        # scheduler=scheduler,
+        scheduler=scheduler,
         progress_reporter=reporter,
         name="dropback")
 
