@@ -130,7 +130,7 @@ class cifar100_datamodule(pl.LightningDataModule):
     
     def __init__(
         self,
-        data_dir:str = "/data/sunxd/data",
+        data_dir:str = "~/data",
         num_workers:int = 8,
         batch_size: int = 256,
         shuffle: bool = False,
