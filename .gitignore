@@ -1,4 +1,4 @@
-*.ipynb
+Notebooks/*.ipynb
 *.out
 .ipynb_checkpoints/*
 __pycache__/*
