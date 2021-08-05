@@ -17,7 +17,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: dropback")
 
-    tune_asha(num_samples=1, num_epochs=350, gpus_per_trial=1)
+    tune_asha(num_samples=6, num_epochs=350, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -44,11 +44,11 @@ def training(config, num_epochs=10, num_gpus=0):
                 },
                 on="validation_end"),
             ModelCheckpoint(
-                monitor='ptl/val_accuracy_top1',
                 filename='epoch{epoch:02d}-val_accuracy{ptl/val_accuracy_top1:.2f}-val_loss{ptl/val_loss:.2f}',
-                save_top_k=3,
-                mode='max',
-                auto_insert_metric_name=False
+                auto_insert_metric_name=False,
+                # monitor='ptl/val_accuracy_top1',
+                # save_top_k=3,
+                # mode='max',         
             ),
         ]
     )
@@ -64,20 +64,20 @@ def training(config, num_epochs=10, num_gpus=0):
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
-        "lr": 0.1,
-        "momentum": 0.9,
+        "lr": 0.123,
+        "momentum": 0.826,
         "weight_decay": 4e-5,
         "track_size": 111835,
-        "init_decay": tune.loguniform(0.99, 0.999),
+        "init_decay": 0.994,
         "q": 0.95,
-        "q_init": tune.loguniform(1e-4, 1e-2),
-	    "q_step": tune.loguniform(1e-6, 1e-4),
-        "sf": tune.grid_search([False,True])
+        "q_init": 0.0073,
+	    "q_step": 1.49e-6,
+        "sf": False
     }
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,
-        grace_period=50,
+        grace_period=60,
         reduction_factor=2)
 
     in_jupyter_notebook = False

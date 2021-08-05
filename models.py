@@ -193,12 +193,12 @@ class DBModel(ExperimentModel):
         use_ReduceLROnPlateau = False
         if use_ReduceLROnPlateau:
             scheduler = lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=0.1, patience=20, threshold=1e-1, threshold_mode='abs', 
+            optimizer, mode='min', factor=0.05, patience=40, threshold=1e-1, threshold_mode='abs', 
             min_lr=0.001, verbose=True)
         
             return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "ptl/val_loss"}
         
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250], gamma=0.1)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[200, 300], gamma=0.1)
         return [optimizer], [scheduler]
     
     def training_epoch_end(self,outputs):
