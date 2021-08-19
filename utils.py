@@ -17,10 +17,10 @@ def measure_module_sparsity(module, threshold=0, weight=True, bias=False, use_ma
     else:
         for param_name, param in module.named_parameters():
             if "weight" in param_name and weight == True:
-                num_zeros += torch.sum(torch.abs(param) < threshold).item()
+                num_zeros += torch.sum(torch.abs(param) <= threshold).item()
                 num_elements += param.nelement()
             if "bias" in param_name and bias == True:
-                num_zeros += torch.sum(torch.abs(param) < threshold).item()
+                num_zeros += torch.sum(torch.abs(param) <= threshold).item()
                 num_elements += param.nelement()
                 
     if num_elements == 0:

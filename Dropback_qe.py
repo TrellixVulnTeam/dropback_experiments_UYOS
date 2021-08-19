@@ -21,7 +21,7 @@ class Dropback(torch.optim.SGD):
         super(Dropback, self).__init__(params, lr=lr, momentum=momentum, weight_decay=weight_decay)
         # TODO: check if input values are valid
 
-        self.debug_flag = True
+        self.debug_flag = False
         self.debug = {
             "tracked_weights": 0,
             "tracked_est": 0,
@@ -66,10 +66,12 @@ class Dropback(torch.optim.SGD):
             # decay init weights
             if overwritten_decay_rate is not None:
                 group['decay_rate'] = overwritten_decay_rate
-            else:
+            elif group['decay_rate'] != 0:
                 if not group['first_iter'] and group['init_decay'] < 1:
                     group['decay_rate'] *= group['init_decay']
-
+                    if group['decay_rate'] < 1e-10:
+                        group['decay_rate'] = 0
+                
             if group['first_iter']:
                 group['first_iter'] = False
 

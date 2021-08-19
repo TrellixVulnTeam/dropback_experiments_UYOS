@@ -198,11 +198,13 @@ class DBModel(ExperimentModel):
         
             return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "ptl/val_loss"}
         
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[200, 300], gamma=0.1)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250, 350], gamma=0.1)
         return [optimizer], [scheduler]
     
     def training_epoch_end(self,outputs):
-        num_zeros, num_elements, sparsity = measure_global_sparsity(self.model, threshold=1e-6, weight=True, bias=True, use_mask=False)
+        zero_threshold = 0
+
+        num_zeros, num_elements, sparsity = measure_global_sparsity(self.model, threshold=zero_threshold, weight=True, bias=True, use_mask=False)
         self.log("num_zeros", num_zeros)
         self.log("num_elements", num_elements)
         self.log("sparsity", sparsity)
@@ -213,7 +215,7 @@ class DBModel(ExperimentModel):
             if hasattr(module, 'bias') and module.bias is not None:
                 self.logger.experiment.add_histogram(name+".bias", module.bias, self.current_epoch)
 
-            module_num_zeros, module_num_elements, _ = measure_module_sparsity(module, threshold=1e-6, weight=True, bias=True, use_mask=False)
+            module_num_zeros, module_num_elements, _ = measure_module_sparsity(module, threshold=zero_threshold, weight=True, bias=True, use_mask=False)
             self.log("remaining_params/" + name, module_num_elements - module_num_zeros)
 
 class PruneModel(ExperimentModel):
@@ -250,7 +252,7 @@ class PruneModel(ExperimentModel):
         
 
         # scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: 0.1)
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250], gamma=0.1)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250, 350], gamma=0.1)
         # scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1 if epoch % 100 >= 50 else 1)
 
         return [optimizer], [scheduler]

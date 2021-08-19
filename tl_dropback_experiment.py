@@ -60,7 +60,7 @@ def training(config, num_epochs=10, num_gpus=0):
     )
 
     # checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/dropback-val_accuracy0.77-val_loss1.25.ckpt"
-    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/dropback_qe-val_accuracy0.81-val_loss0.67.ckpt"
+    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/dropback-val_accuracy0.82-val_loss0.81.ckpt"
     # checkpoint_path = None
     if checkpoint_path:
         checkpoint = torch.load(checkpoint_path)
@@ -83,20 +83,20 @@ def training(config, num_epochs=10, num_gpus=0):
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
-        "lr": 0.1,
-        "momentum": 0.9,
+        "lr": 0.123,
+        "momentum": 0.826,
         "weight_decay": 4e-5,
         "track_size": 111835,
-        "init_decay": 0.999,
+        "init_decay": 0.994,
         "q": 0.95,
-        "q_init": 1e-3,
-	    "q_step": 1e-4,
-        "sf": False,
+        "q_init": 0.0073,
+	    "q_step": 1.49e-6,
+        "sf": False
     }
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,
-        grace_period=20,
+        grace_period=60,
         reduction_factor=2)
 
     in_jupyter_notebook = False
@@ -125,7 +125,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         mode="min",
         config=config,
         num_samples=num_samples,
-        # scheduler=scheduler,
+        scheduler=scheduler,
         progress_reporter=reporter,
         name="tl_dropback")
 

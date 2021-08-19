@@ -21,7 +21,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: tl_prune")
 
-    tune_asha(num_samples=1, num_epochs=1000, gpus_per_trial=1)
+    tune_asha(num_samples=20, num_epochs=450, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -31,7 +31,7 @@ def training(config, num_epochs=10, num_gpus=0):
     training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
     target_list = (33, 19, 63, 79, 46, 93, 50, 52, 8, 85)
     target_list_2 = (49, 15, 66, 99, 98, 29, 74, 47, 58, 89)
-    cifar100_dm = cifar100_datamodule(labels=target_list_2, already_prepared=True, data_dir="/data/sunxd/data")
+    cifar100_dm = cifar100_datamodule(labels=target_list, already_prepared=True, data_dir="/data/sunxd/data")
     num_classes = cifar100_dm.num_classes
     
     trainer = pl.Trainer(
@@ -60,7 +60,7 @@ def training(config, num_epochs=10, num_gpus=0):
         ]
     )
 
-    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/prune-val_accuracy0.82-val_loss1.07_sparsity0.95.ckpt"
+    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/prune-val_accuracy0.83-val_loss1.17_sparsity0.97.ckpt"
     # checkpoint_path = None
     if checkpoint_path:
         model = PruneModel(config=config, num_classes=num_classes)
@@ -80,14 +80,14 @@ def training(config, num_epochs=10, num_gpus=0):
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
-        "lr": 0.1,
-        "momentum": 0.9,
-        "weight_decay": 4e-5,
+        "lr": 0.193821,
+        "momentum": 0.88381, 
+        "weight_decay": 0.00069,
     }
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,
-        grace_period=20,
+        grace_period=60,
         reduction_factor=2)
 
     in_jupyter_notebook = False
@@ -116,9 +116,9 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         mode="min",
         config=config,
         num_samples=num_samples,
-        # scheduler=scheduler,
+        scheduler=scheduler,
         progress_reporter=reporter,
-        name="tl_prune_2")
+        name="tl_prune")
 
     print("Best hyperparameters found were: ", analysis.best_config)
 

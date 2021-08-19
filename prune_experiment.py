@@ -60,7 +60,7 @@ def training(config, num_epochs=10, num_gpus=0):
                 pruning_fn='l1_unstructured',
                 parameter_names=["weight", "bias"],
                 make_pruning_permanent=False,
-                amount = lambda epoch: 0.1 if epoch % 100 == 0 else 0,
+                amount = lambda epoch: 0.05 if epoch % 100 == 0 else 0,
                 use_global_unstructured=True,
                 verbose=1,
                 use_lottery_ticket_hypothesis=False
@@ -68,7 +68,7 @@ def training(config, num_epochs=10, num_gpus=0):
         ]
     )
 
-    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/prune-val_accuracy0.82-val_loss1.18_sparsity0.86.ckpt"
+    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/prune-val_accuracy0.82-val_loss0.93_sparsity0.96.ckpt"
     # checkpoint_path = None
     if checkpoint_path:
         model = PruneModel(config=config, num_classes=num_classes)
