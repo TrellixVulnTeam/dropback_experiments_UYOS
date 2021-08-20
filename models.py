@@ -252,8 +252,8 @@ class PruneModel(ExperimentModel):
         
 
         # scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: 0.1)
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250, 350], gamma=0.1)
-        # scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1 if epoch % 100 >= 50 else 1)
+        # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250, 350], gamma=0.1)
+        scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1 if epoch % 100 >= 50 else 1)
 
         return [optimizer], [scheduler]
 
