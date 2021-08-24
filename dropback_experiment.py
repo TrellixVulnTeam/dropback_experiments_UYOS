@@ -19,7 +19,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: dropback")
 
-    tune_asha(num_samples=30, num_epochs=450, gpus_per_trial=1)
+    tune_asha(num_samples=8, num_epochs=450, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -27,7 +27,7 @@ def training(config, num_epochs=10, num_gpus=0):
         seed_everything(42, workers=True)
     
     training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
-    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True, data_dir=str(Path().resolve().parent)+"/data")
+    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True, data_dir=str(Path.home())+"/data")
     num_classes = cifar100_dm.num_classes
 
     trainer = pl.Trainer(
