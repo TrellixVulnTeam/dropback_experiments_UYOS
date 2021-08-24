@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import math
 
 import pytorch_lightning as pl
@@ -17,7 +19,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: dropback")
 
-    tune_asha(num_samples=1, num_epochs=450, gpus_per_trial=1)
+    tune_asha(num_samples=30, num_epochs=450, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -25,7 +27,7 @@ def training(config, num_epochs=10, num_gpus=0):
         seed_everything(42, workers=True)
     
     training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
-    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True, data_dir="/data/sunxd/data")
+    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True, data_dir=str(Path().resolve().parent)+"/data")
     num_classes = cifar100_dm.num_classes
 
     trainer = pl.Trainer(
@@ -64,14 +66,14 @@ def training(config, num_epochs=10, num_gpus=0):
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
-        "lr": 0.123,
-        "momentum": 0.826,
-        "weight_decay": 4e-5,
+        "lr": 0.193821,
+        "momentum": 0.88381, 
+        "weight_decay": 0.00069,
         "track_size": 111835,
-        "init_decay": 0.994,
+        "init_decay": 0.995,
         "q": 0.95,
-        "q_init": 0.0073,
-	    "q_step": 1.49e-6,
+        "q_init": 0.0042582,
+	    "q_step": 1.1148e-6,
         "sf": False
     }
 
@@ -84,12 +86,12 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     if in_jupyter_notebook:
         reporter = JupyterNotebookReporter(
             overwrite=False,
-            parameter_columns=["lr", "momentum"],
+            parameter_columns=["lr", "momentum", "weight_decay", "q_init", "q_step"],
             metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
         )
     else:
         reporter = CLIReporter(
-            parameter_columns=["lr", "momentum"],
+            parameter_columns=["lr", "momentum", "weight_decay", "q_init", "q_step"],
             metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
 
     analysis = tune.run(
