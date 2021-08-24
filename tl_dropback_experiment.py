@@ -85,14 +85,14 @@ def training(config, num_epochs=10, num_gpus=0):
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
-        "lr": 0.123,
-        "momentum": 0.826,
-        "weight_decay": 4e-5,
+        "lr": 0.193821,
+        "momentum": 0.88381,
+        "weight_decay": 0.00069,
         "track_size": 111835,
         "init_decay": 0.994,
         "q": 0.95,
-        "q_init": 0.0073,
-	    "q_step": 1.49e-6,
+        "q_init": 0.0042582,
+	    "q_step": 1.1148e-6,
         "sf": False
     }
 

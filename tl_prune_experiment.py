@@ -82,10 +82,16 @@ def training(config, num_epochs=10, num_gpus=0):
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
-        "lr": 0.193821,
-        "momentum": 0.88381, 
-        "weight_decay": 0.00069,
+        "lr": 0.178041,
+        "momentum": 0.84, 
+        "weight_decay": 0.00041589,
     }
+
+    # config = {
+    #     "lr": tune.uniform(0.1, 0.3),
+    #     "momentum": tune.loguniform(0.8, 0.99),
+    #     "weight_decay": tune.loguniform(1e-5, 1e-3),
+    # }
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,
