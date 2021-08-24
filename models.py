@@ -16,6 +16,8 @@ from utils import measure_global_sparsity, measure_module_sparsity
 # from Dropback import Dropback
 from Dropback_qe import Dropback
 
+collecting_histogram = False
+
 class ExperimentModel(pl.LightningModule):
 
     def __init__(
@@ -111,11 +113,12 @@ class ExperimentModel(pl.LightningModule):
         self.log_dict({'test_loss': loss, 'test_acc': accuracy})
 
     def training_epoch_end(self,outputs):
-        for name, module in self.named_modules():
-            if hasattr(module, 'weight'):
-                self.logger.experiment.add_histogram(name+".weight", module.weight, self.current_epoch)
-            if hasattr(module, 'bias') and module.bias is not None:
-                self.logger.experiment.add_histogram(name+".bias", module.bias, self.current_epoch)
+        if collecting_histogram:
+            for name, module in self.named_modules():
+                if hasattr(module, 'weight'):
+                    self.logger.experiment.add_histogram(name+".weight", module.weight, self.current_epoch)
+                if hasattr(module, 'bias') and module.bias is not None:
+                    self.logger.experiment.add_histogram(name+".bias", module.bias, self.current_epoch)
 
     def on_load_checkpoint(self, checkpoint: dict) -> None:
         # To avoid size mismatch when loading the checkpoint
@@ -208,15 +211,16 @@ class DBModel(ExperimentModel):
         self.log("num_zeros", num_zeros)
         self.log("num_elements", num_elements)
         self.log("sparsity", sparsity)
-        
-        for name, module in self.named_modules():
-            if hasattr(module, 'weight'):
-                self.logger.experiment.add_histogram(name+".weight", module.weight, self.current_epoch)
-            if hasattr(module, 'bias') and module.bias is not None:
-                self.logger.experiment.add_histogram(name+".bias", module.bias, self.current_epoch)
 
-            module_num_zeros, module_num_elements, _ = measure_module_sparsity(module, threshold=zero_threshold, weight=True, bias=True, use_mask=False)
-            self.log("remaining_params/" + name, module_num_elements - module_num_zeros)
+        if collecting_histogram:
+            for name, module in self.named_modules():
+                if hasattr(module, 'weight'):
+                    self.logger.experiment.add_histogram(name+".weight", module.weight, self.current_epoch)
+                if hasattr(module, 'bias') and module.bias is not None:
+                    self.logger.experiment.add_histogram(name+".bias", module.bias, self.current_epoch)
+
+                module_num_zeros, module_num_elements, _ = measure_module_sparsity(module, threshold=zero_threshold, weight=True, bias=True, use_mask=False)
+                self.log("remaining_params/" + name, module_num_elements - module_num_zeros)
 
 class PruneModel(ExperimentModel):
     def __init__(
@@ -228,9 +232,11 @@ class PruneModel(ExperimentModel):
             "momentum": 0.9,
             "weight_decay": 4e-5,
         },
+        pruning: bool = False,
         pre_trained: bool = False,
     ):
         super().__init__(arch=arch, num_classes=num_classes, config=config, pre_trained=pre_trained)
+        self.pruning = pruning
 
     def configure_optimizers(self):
         parameters = list(self.parameters())
@@ -250,10 +256,10 @@ class PruneModel(ExperimentModel):
         
             return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "ptl/val_loss"}
         
-
-        # scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: 0.1)
-        # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250, 350], gamma=0.1)
-        scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1 if epoch % 100 >= 50 else 1)
+        if self.pruning:
+            scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250, 350], gamma=0.1)
+        else:
+            scheduler = lr_scheduler.LambdaLR(optimizer, lambda epoch: 0.1 if epoch % 100 >= 50 else 1)
 
         return [optimizer], [scheduler]
 
@@ -264,12 +270,13 @@ class PruneModel(ExperimentModel):
         self.log("num_elements", num_elements)
         self.log("sparsity", sparsity)
 
-        for name, module in self.named_modules():
-            if hasattr(module, 'weight'):
-                self.logger.experiment.add_histogram(name+".weight", module.weight, self.current_epoch)
-            if hasattr(module, 'bias') and module.bias is not None:
-                self.logger.experiment.add_histogram(name+".bias", module.bias, self.current_epoch)
-            
-            module_num_zeros, module_num_elements, _ = measure_module_sparsity(module, threshold=0, weight=True, bias=True, use_mask=True)
-            self.log("remaining_params/" + name, module_num_elements - module_num_zeros)
+        if collecting_histogram:
+            for name, module in self.named_modules():
+                if hasattr(module, 'weight'):
+                    self.logger.experiment.add_histogram(name+".weight", module.weight, self.current_epoch)
+                if hasattr(module, 'bias') and module.bias is not None:
+                    self.logger.experiment.add_histogram(name+".bias", module.bias, self.current_epoch)
+                
+                module_num_zeros, module_num_elements, _ = measure_module_sparsity(module, threshold=0, weight=True, bias=True, use_mask=True)
+                self.log("remaining_params/" + name, module_num_elements - module_num_zeros)
 

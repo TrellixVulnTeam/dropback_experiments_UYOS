@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import math
 
 import pytorch_lightning as pl
@@ -18,7 +20,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: baseline")
 
-    tune_asha(num_samples=20, num_epochs=450, gpus_per_trial=1)
+    tune_asha(num_samples=100, num_epochs=400, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -28,7 +30,7 @@ def training(config, num_epochs=10, num_gpus=0):
     training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
     target_list = (33, 19, 63, 79, 46, 93, 50, 52, 8, 85)
     target_list_2 = (49, 15, 66, 99, 98, 29, 74, 47, 58, 89)
-    cifar100_dm = cifar100_datamodule(labels=training_labels,  already_prepared=True, data_dir="/data/sunxd/data")
+    cifar100_dm = cifar100_datamodule(labels=training_labels,  already_prepared=True, data_dir=str(Path.home())+"/data")
     num_classes = cifar100_dm.num_classes
 
     trainer = pl.Trainer(
@@ -68,17 +70,17 @@ def training(config, num_epochs=10, num_gpus=0):
 
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
-    # config = {
-    #     "lr": tune.uniform(0.1, 0.3),
-    #     "momentum": tune.uniform(0.9, 0.99),
-    #     "weight_decay": tune.loguniform(1e-5, 1e-3),
-    # }
-
     config = {
-        "lr": 0.193821,
-        "momentum": 0.88381, 
-        "weight_decay": 0.00069,
+        "lr": tune.uniform(0.05, 0.3),
+        "momentum": tune.uniform(0.8, 0.99),
+        "weight_decay": tune.loguniform(1e-6, 1e-3),
     }
+
+    # config = {
+    #     "lr": 0.193821,
+    #     "momentum": 0.88381, 
+    #     "weight_decay": 0.00069,
+    # }
 
     scheduler = ASHAScheduler(
         max_t=num_epochs,
@@ -89,12 +91,12 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     if in_jupyter_notebook:
         reporter = JupyterNotebookReporter(
             overwrite=False,
-            parameter_columns=["lr", "momentum"],
+            parameter_columns=["lr", "momentum", "weight_decay"],
             metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
         )
     else:
         reporter = CLIReporter(
-            parameter_columns=["lr", "momentum"],
+            parameter_columns=["lr", "momentum", "weight_decay"],
             metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
 
     analysis = tune.run(
@@ -104,7 +106,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
             num_gpus=gpus_per_trial,
         ),
         resources_per_trial={
-            "cpu": 2,
+            "cpu": 4,
             "gpu": gpus_per_trial
         },
         metric="loss",

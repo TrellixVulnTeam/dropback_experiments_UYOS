@@ -19,7 +19,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: dropback")
 
-    tune_asha(num_samples=8, num_epochs=450, gpus_per_trial=1)
+    tune_asha(num_samples=50, num_epochs=400, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -101,7 +101,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
             num_gpus=gpus_per_trial,
         ),
         resources_per_trial={
-            "cpu": 2,
+            "cpu": 4,
             "gpu": gpus_per_trial
         },
         metric="loss",

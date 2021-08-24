@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import math
 
 import torch
@@ -29,7 +31,7 @@ def training(config, num_epochs=10, num_gpus=0):
         seed_everything(42, workers=True)
 
     training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
-    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True, data_dir="/data/sunxd/data")
+    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True, data_dir=str(Path.home())+"/data")
     num_classes = cifar100_dm.num_classes
     
     trainer = pl.Trainer(
@@ -71,7 +73,7 @@ def training(config, num_epochs=10, num_gpus=0):
     checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/prune-val_accuracy0.88-val_loss0.53_sparsity0.91.ckpt"
     # checkpoint_path = None
     if checkpoint_path:
-        model = PruneModel(config=config, num_classes=num_classes)
+        model = PruneModel(config=config, num_classes=num_classes, pruning=True)
         for name, module in model.named_modules():
             if hasattr(module, "weight") and module.weight is not None: 
                 torch.nn.utils.prune.identity(module, "weight")
@@ -82,7 +84,7 @@ def training(config, num_epochs=10, num_gpus=0):
         model.load_state_dict(checkpoint['state_dict'])  
         rank_zero_info(f"Checkpoint {checkpoint_path} loaded.")
     else:
-        model = PruneModel(config=config, num_classes=num_classes)
+        model = PruneModel(config=config, num_classes=num_classes, pruning=True)
 
     trainer.fit(model, datamodule=cifar100_dm) 
 
@@ -102,12 +104,12 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     if in_jupyter_notebook:
         reporter = JupyterNotebookReporter(
             overwrite=False,
-            parameter_columns=["lr", "momentum"],
+            parameter_columns=["lr", "momentum", "weight_decay"],
             metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
         )
     else:
         reporter = CLIReporter(
-            parameter_columns=["lr", "momentum"],
+            parameter_columns=["lr", "momentum", "weight_decay"],
             metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
 
     analysis = tune.run(
@@ -117,7 +119,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
             num_gpus=gpus_per_trial,
         ),
         resources_per_trial={
-            "cpu": 2,
+            "cpu": 4,
             "gpu": gpus_per_trial
         },
         metric="loss",
