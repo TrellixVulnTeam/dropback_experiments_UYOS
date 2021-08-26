@@ -19,7 +19,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: dropback")
 
-    tune_asha(num_samples=50, num_epochs=400, gpus_per_trial=1)
+    tune_asha(num_samples=40, num_epochs=450, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -27,7 +27,10 @@ def training(config, num_epochs=10, num_gpus=0):
         seed_everything(42, workers=True)
     
     training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
-    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True, data_dir=str(Path.home())+"/data")
+    training_labels_2 = (55, 91, 54, 28, 57, 86, 94, 18, 88, 17)
+    target_list = (33, 19, 63, 79, 46, 93, 50, 52, 8, 85)
+    target_list_2 = (49, 15, 66, 99, 98, 29, 74, 47, 58, 89)
+    cifar100_dm = cifar100_datamodule(labels=training_labels_2, already_prepared=True, data_dir=str(Path.home())+"/data")
     num_classes = cifar100_dm.num_classes
 
     trainer = pl.Trainer(
@@ -43,6 +46,7 @@ def training(config, num_epochs=10, num_gpus=0):
                     "loss": "ptl/val_loss",
                     "mean_accuracy": "ptl/val_accuracy_top1",
                     "current_lr": "current_lr",
+                    "sparsity": "sparsity"
                 },
                 on="validation_end"),
             ModelCheckpoint(
@@ -54,8 +58,8 @@ def training(config, num_epochs=10, num_gpus=0):
             ),
         ]
     )
+    
     checkpoint_path = None
-
     if checkpoint_path:
         model = DBModel.load_from_checkpoint(checkpoint_path, config=config, num_classes=num_classes)  
         rank_zero_info(f"Checkpoint {checkpoint_path} loaded.")
@@ -66,14 +70,14 @@ def training(config, num_epochs=10, num_gpus=0):
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
-        "lr": 0.193821,
-        "momentum": 0.88381, 
-        "weight_decay": 0.00069,
+        "lr": tune.uniform(0.05, 0.3),
+        "momentum": tune.uniform(0.8, 0.99), 
+        "weight_decay": tune.loguniform(1e-6, 1e-3),
         "track_size": 111835,
         "init_decay": 0.995,
         "q": 0.95,
-        "q_init": 0.0042582,
-	    "q_step": 1.1148e-6,
+        "q_init": tune.loguniform(1e-4, 1e-2),
+	    "q_step": tune.loguniform(1e-6, 1e-4),
         "sf": False
     }
 
@@ -87,12 +91,12 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         reporter = JupyterNotebookReporter(
             overwrite=False,
             parameter_columns=["lr", "momentum", "weight_decay", "q_init", "q_step"],
-            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr", "sparsity"]
         )
     else:
         reporter = CLIReporter(
             parameter_columns=["lr", "momentum", "weight_decay", "q_init", "q_step"],
-            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr", "sparsity"])
 
     analysis = tune.run(
         tune.with_parameters(
@@ -110,7 +114,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         num_samples=num_samples,
         scheduler=scheduler,
         progress_reporter=reporter,
-        name="dropback")
+        name="source_2_dropback")
 
     print("Best hyperparameters found were: ", analysis.best_config)
 

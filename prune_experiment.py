@@ -23,7 +23,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: prune")
 
-    tune_asha(num_samples=6, num_epochs=1000, gpus_per_trial=1)
+    tune_asha(num_samples=6, num_epochs=600, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -31,7 +31,10 @@ def training(config, num_epochs=10, num_gpus=0):
         seed_everything(42, workers=True)
 
     training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
-    cifar100_dm = cifar100_datamodule(labels=training_labels, already_prepared=True, data_dir=str(Path.home())+"/data")
+    training_labels_2 = (55, 91, 54, 28, 57, 86, 94, 18, 88, 17)
+    target_list = (33, 19, 63, 79, 46, 93, 50, 52, 8, 85)
+    target_list_2 = (49, 15, 66, 99, 98, 29, 74, 47, 58, 89)
+    cifar100_dm = cifar100_datamodule(labels=training_labels_2, already_prepared=True, data_dir=str(Path.home())+"/data")
     num_classes = cifar100_dm.num_classes
     
     trainer = pl.Trainer(
@@ -70,8 +73,8 @@ def training(config, num_epochs=10, num_gpus=0):
         ]
     )
 
-    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/prune-val_accuracy0.88-val_loss0.53_sparsity0.91.ckpt"
     # checkpoint_path = None
+    checkpoint_path = str(Path.home()) + "/" + "dropback_experiments/checkpoints/prune_2-val_accuracy0.88-val_loss0.49_sparsity0.94.ckpt"
     if checkpoint_path:
         model = PruneModel(config=config, num_classes=num_classes, pruning=True)
         for name, module in model.named_modules():
@@ -87,12 +90,12 @@ def training(config, num_epochs=10, num_gpus=0):
         model = PruneModel(config=config, num_classes=num_classes, pruning=True)
 
     trainer.fit(model, datamodule=cifar100_dm) 
-
+    
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
-        "lr": 0.193821,
-        "momentum": 0.88381, 
-        "weight_decay": 0.00069,
+        "lr": tune.uniform(0.05, 0.3),
+        "momentum": tune.uniform(0.8, 0.99),
+        "weight_decay": tune.loguniform(1e-6, 1e-3),
     }
 
     scheduler = ASHAScheduler(
@@ -105,12 +108,12 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         reporter = JupyterNotebookReporter(
             overwrite=False,
             parameter_columns=["lr", "momentum", "weight_decay"],
-            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr", "sparsity"]
         )
     else:
         reporter = CLIReporter(
             parameter_columns=["lr", "momentum", "weight_decay"],
-            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr", "sparsity"])
 
     analysis = tune.run(
         tune.with_parameters(
@@ -128,7 +131,7 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         num_samples=num_samples,
         scheduler=scheduler,
         progress_reporter=reporter,
-        name="prune")
+        name="prune_2")
 
     print("Best hyperparameters found were: ", analysis.best_config)
 

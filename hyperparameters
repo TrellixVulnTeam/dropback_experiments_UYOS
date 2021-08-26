@@ -1,0 +1,45 @@
+# Source_1 baseline and prune
+    config = {
+        "lr": 0.09680956215824056,
+        "momentum": 0.9059276720515552, 
+        "weight_decay": 0.0008532143256577432,
+    }
+
+# Source_1 dropback
+    {
+        "lr": 0.193821,
+        "momentum": 0.88381, 
+        "weight_decay": 0.00069,
+        "track_size": 111835,
+        "init_decay": 0.995,
+        "q": 0.95,
+        "q_init": 0.0042582,
+	    "q_step": 1.1148e-6,
+        "sf": False
+    }
+
+# Source_2 baseline and prune
+{'lr': 0.09815477300904417, 'momentum': 0.9466884686623851, 'weight_decay': 0.0006291436128467255}
+# Source_2 dropback
+    config = {
+        "lr": 0.1694048384701396,
+        "momentum": 0.8287649219545838, 
+        "weight_decay": 0.0008257632452159326,
+        "track_size": 111835,
+        "init_decay": 0.995,
+        "q": 0.95,
+        "q_init": 0.0025425721485054786,
+	    "q_step": 1.0319665251146792e-06,
+        "sf": False
+    }
+
+# Target_1 baseline
+
+# Target_2 baseline
+{'lr': 0.15848560016801105, 'momentum': 0.8643256162691542, 'weight_decay': 0.0009869881998415765}
+
+# Source_1 to Target_1 prune
+# Source_1 to Target_2 dropback
+
+# Source_2 to Target_1 prune
+# Source_2 to Target_2 dropback

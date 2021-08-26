@@ -31,6 +31,7 @@ def training(config, num_epochs=10, num_gpus=0):
         seed_everything(42, workers=True)
 
     training_labels = (30, 67, 62, 10, 51, 22, 20, 24, 97, 76)
+    training_labels_2 = (55, 91, 54, 28, 57, 86, 94, 18, 88, 17)
     target_list = (33, 19, 63, 79, 46, 93, 50, 52, 8, 85)
     target_list_2 = (49, 15, 66, 99, 98, 29, 74, 47, 58, 89)
     cifar100_dm = cifar100_datamodule(labels=target_list, already_prepared=True, data_dir=str(Path.home())+"/data")
@@ -61,9 +62,8 @@ def training(config, num_epochs=10, num_gpus=0):
         ]
     )
 
-    # checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/dropback-val_accuracy0.77-val_loss1.25.ckpt"
-    checkpoint_path = "/data/sunxd/dropback_experiments/checkpoints/dropback-val_accuracy0.82-val_loss0.81.ckpt"
     # checkpoint_path = None
+    checkpoint_path = str(Path.home()) + "/" + "dropback_experiments/checkpoints/dropback-val_accuracy0.82-val_loss0.81.ckpt"
     if checkpoint_path:
         checkpoint = torch.load(checkpoint_path)
         model = DBModel(config=config, num_classes=num_classes)
@@ -85,14 +85,14 @@ def training(config, num_epochs=10, num_gpus=0):
 
 def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
     config = {
-        "lr": 0.193821,
-        "momentum": 0.88381,
-        "weight_decay": 0.00069,
+        "lr": tune.uniform(0.05, 0.3),
+        "momentum": tune.uniform(0.8, 0.99), 
+        "weight_decay": tune.loguniform(1e-6, 1e-3),
         "track_size": 111835,
-        "init_decay": 0.994,
+        "init_decay": 0.995,
         "q": 0.95,
-        "q_init": 0.0042582,
-	    "q_step": 1.1148e-6,
+        "q_init": tune.loguniform(1e-4, 1e-2),
+	    "q_step": tune.loguniform(1e-6, 1e-4),
         "sf": False
     }
 
