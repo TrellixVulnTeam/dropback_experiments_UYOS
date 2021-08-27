@@ -23,7 +23,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: tl_dropback")
 
-    tune_asha(num_samples=1, num_epochs=400, gpus_per_trial=1)
+    tune_asha(num_samples=80, num_epochs=450, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -34,7 +34,7 @@ def training(config, num_epochs=10, num_gpus=0):
     training_labels_2 = (55, 91, 54, 28, 57, 86, 94, 18, 88, 17)
     target_list = (33, 19, 63, 79, 46, 93, 50, 52, 8, 85)
     target_list_2 = (49, 15, 66, 99, 98, 29, 74, 47, 58, 89)
-    cifar100_dm = cifar100_datamodule(labels=target_list, already_prepared=True, data_dir=str(Path.home())+"/data")
+    cifar100_dm = cifar100_datamodule(labels=target_list_2, already_prepared=True, data_dir=str(Path.home())+"/data")
     num_classes = cifar100_dm.num_classes
     
     trainer = pl.Trainer(
@@ -50,6 +50,7 @@ def training(config, num_epochs=10, num_gpus=0):
                     "loss": "ptl/val_loss",
                     "mean_accuracy": "ptl/val_accuracy_top1",
                     "current_lr": "current_lr",
+                    "sparsity" : "sparsity"
                 },
                 on="validation_end"),
             ModelCheckpoint(
@@ -63,7 +64,7 @@ def training(config, num_epochs=10, num_gpus=0):
     )
 
     # checkpoint_path = None
-    checkpoint_path = str(Path.home()) + "/" + "dropback_experiments/checkpoints/dropback-val_accuracy0.82-val_loss0.81.ckpt"
+    checkpoint_path = str(Path.home()) + "/" + "dropback_experiments/checkpoints/Source_1/dropback-val_accuracy0.87-val_loss0.64.ckpt"
     if checkpoint_path:
         checkpoint = torch.load(checkpoint_path)
         model = DBModel(config=config, num_classes=num_classes)
@@ -106,12 +107,12 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         reporter = JupyterNotebookReporter(
             overwrite=False,
             parameter_columns=["lr", "momentum", "weight_decay", "q_init", "q_step"],
-            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr", "sparsity"]
         )
     else:
         reporter = CLIReporter(
             parameter_columns=["lr", "momentum", "weight_decay", "q_init", "q_step"],
-            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr", "sparsity"])
 
     analysis = tune.run(
         tune.with_parameters(
