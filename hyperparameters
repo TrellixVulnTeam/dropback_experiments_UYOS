@@ -6,7 +6,7 @@
     }
 
 # Source_1 dropback
-    {
+    config = {
         "lr": 0.193821,
         "momentum": 0.88381, 
         "weight_decay": 0.00069,
@@ -19,7 +19,11 @@
     }
 
 # Source_2 baseline and prune
-{'lr': 0.09815477300904417, 'momentum': 0.9466884686623851, 'weight_decay': 0.0006291436128467255}
+    config = {
+        'lr': 0.09815477300904417, 
+        'momentum': 0.9466884686623851, 
+        'weight_decay': 0.0006291436128467255
+    }
 # Source_2 dropback
     config = {
         "lr": 0.1694048384701396,
@@ -36,7 +40,11 @@
 # Target_1 baseline
 
 # Target_2 baseline
-{'lr': 0.15848560016801105, 'momentum': 0.8643256162691542, 'weight_decay': 0.0009869881998415765}
+    config = {
+        'lr': 0.15848560016801105, 
+        'momentum': 0.8643256162691542, 
+        'weight_decay': 0.0009869881998415765
+    }
 
 # Source_1 to Target_1 prune
 # Source_1 to Target_2 dropback

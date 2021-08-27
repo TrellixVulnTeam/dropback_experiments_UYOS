@@ -23,7 +23,7 @@ from datamodules import cifar100_datamodule
 def main():
     rank_zero_info(f"Experiment name is: tl_prune")
 
-    tune_asha(num_samples=20, num_epochs=450, gpus_per_trial=1)
+    tune_asha(num_samples=30, num_epochs=450, gpus_per_trial=1)
 
 def training(config, num_epochs=10, num_gpus=0):
     deterministic = False
@@ -64,7 +64,7 @@ def training(config, num_epochs=10, num_gpus=0):
     )
 
     # checkpoint_path = None
-    checkpoint_path = str(Path.home()) + "/" + "dropback_experiments/checkpoints/dropback-val_accuracy0.87-val_loss0.64.ckpt"
+    checkpoint_path = str(Path.home()) + "/" + "dropback_experiments/checkpoints/Source_1/prune-val_accuracy0.88-val_loss0.54_sparsity0.95.ckpt"
     if checkpoint_path:
         model = PruneModel(config=config, num_classes=num_classes, pruning=False)
         for name, module in model.named_modules():
@@ -98,12 +98,12 @@ def tune_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         reporter = JupyterNotebookReporter(
             overwrite=False,
             parameter_columns=["lr", "momentum", "weight_decay"],
-            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"]
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr", "sparsity"]
         )
     else:
         reporter = CLIReporter(
             parameter_columns=["lr", "momentum", "weight_decay"],
-            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr"])
+            metric_columns=["loss", "mean_accuracy", "training_iteration", "current_lr", "sparsity"])
 
     analysis = tune.run(
         tune.with_parameters(
